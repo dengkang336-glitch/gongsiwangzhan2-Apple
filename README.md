@@ -72,60 +72,64 @@ python3 -m http.server 8800
 
 产品截图放在 `assets/img/`，命名 `<slug>-01.jpg`……。换图后确认长宽比仍是竖图 620×1344 或宽图 1280×800，否则卡片会被裁切。
 
-## 五、部署（GitHub Actions → 自有服务器，已上线）
+## 五、部署（GitHub Actions → 国内服务器，已上线）
 
-线上地址：**https://yunshufz.top**（Let's Encrypt 证书由服务器上的 Caddy 自动签发、自动续期）
+线上地址：**https://yunshufz.top**（Let's Encrypt 证书，certbot webroot 申请，`certbot.timer` 自动续期）
 
-为什么绕 GitHub：本机（大陆联通）到这台服务器的 **22 / 80 / 443 全被阻断**（`curl` 直接超时），GitHub 的 runner 在海外，到同机房线路通畅。所以推 `main` 就等于发布：工作流在 GitHub 那边登录服务器、同步文件、重载 Caddy，全部动作不需要本机能连上服务器。
+推 `main` 即发布：工作流在 GitHub 海外 runner 上登录服务器、同步文件、`nginx -t` 通过后 `systemctl reload nginx`，约 60 秒。也可在 Actions 页面 **Run workflow** 手动发一次。
 
-```
-git add -A && git commit -m "..." && git push origin main
-→ Actions「deploy」跑约 30 秒，站点更新
-```
-
-也可以在 Actions 页面点 **Run workflow** 手动发布一次。
+> 2026-11-20 起主站从海外机（43.162.93.153，Caddy）**迁到国内机**（129.204.52.104，宿主机 nginx），DNS 已指向国内机。海外那套仍留在仓库里当备用：`.github/workflows/deploy-overseas.yml`，只支持手动触发。
 
 ### 服务器上的落点
 
 | 东西 | 位置 |
 | --- | --- |
-| 服务器 | `43.162.93.153`（用户 `ubuntu`），同机还跑着 mamorialgrove.top |
-| 静态文件（宿主机） | `/opt/jinianren3d/company-site/yunshufz` |
-| 静态文件（容器内） | `/srv/company/yunshufz`（Caddy 容器 `jinianren-caddy` 的 bind mount） |
-| 站点配置 | `/opt/jinianren3d/caddy-sites/yunshufz.top.caddy`（由工作流生成，别手改） |
-| 配置入口 | `/opt/jinianren3d/Caddyfile`，最后一行 `import /etc/caddy/sites/*.caddy` |
+| 服务器 | `129.204.52.104`（腾讯云，用户 `ubuntu`），同机还跑着 ocrtext.top |
+| 静态文件 | `/var/www/yunshufz.top`（2.8 MB） |
+| nginx vhost | `/etc/nginx/conf.d/yunshufz.top.conf`（**仓库里的副本在 `deploy/nginx/yunshufz.top.conf`，以仓库为准**，工作流每次覆盖） |
+| 证书 | `/etc/letsencrypt/live/yunshufz.top/`（到期 2027-02-18，自动续期） |
+| 日志 | `/var/log/nginx/yunshufz.top.access.log` / `.error.log` |
 
-`content/`、`tools/`、`*.md`、隐藏文件都**不会**同步上去，服务器上只有能直接给浏览器看的东西。
+`content/`、`tools/`、`*.md`、隐藏文件都**不会**同步上去。
 
 ### 仓库里的配置
 
-Settings → Secrets and variables → Actions：
-
 | 名称 | 类型 | 值 |
 | --- | --- | --- |
-| `DEPLOY_HOST` | secret | `43.162.93.153` |
+| `DEPLOY_HOST` | secret | `129.204.52.104` |
 | `DEPLOY_USER` | secret | `ubuntu` |
-| `DEPLOY_SSH_KEY` | secret | 部署私钥全文（与 memorialgrove / 旧公司站用的同一把） |
+| `DEPLOY_SSH_KEY` | secret | 本机 `~/.ssh/memorial_deploy` 全文（这台机器 ubuntu 认可的那把） |
 | `DEPLOY_PORT` | secret（可选） | 默认 `22` |
-| `DOMAIN` | variable | `yunshufz.top` |
-| `SITE_SUBDIR` | variable（可选） | 默认 `yunshufz` |
-| `GUARD_DOMAINS` | variable（可选） | 默认 `ysfangzhou.xyz mamorialgrove.top`，发布后逐个回查 |
+| `SITE_ROOT` | variable | `/var/www/yunshufz.top` |
+| `GUARD_DOMAINS` | variable | `ocrtext.top` |
 
-### 不影响同机其它站点（这是硬要求）
+### 不影响同机其它站点
 
-工作流只做加法，且每一步都带护栏：
+1. 只往 `/var/www/yunshufz.top/` 写，`rsync --delete` 作用域不外溢；
+2. nginx 只写自己的 `conf.d/yunshufz.top.conf`，不动 `ocrtext.top.conf`；
+3. reload 前先 `nginx -t`，不通过就**不 reload**（现网配置不变，其它站点无感）；
+4. 只 `systemctl reload`，**绝不 `restart`**；
+5. 发布后回查 `ocrtext.top`：改动前 200、改动后必须仍 200，否则判定事故并失败。
 
-1. 静态文件进**独立子目录**，`rsync --delete` 的作用域只到 `.../company-site/yunshufz/`；
-2. 站点配置写**独立文件**，从不改写别人的 `.caddy`；
-3. 重载前先 `caddy validate` —— 语法有问题就删掉自己的块、不重载、直接失败；
-4. **只 `caddy reload`，不 `docker restart`**（restart 会让同机所有站点瞬断）；
-5. 发布后自检：新域名关键页面 200 + 内容抽检（公司全称、地址、canonical）+ HTTP 必跳 HTTPS；`GUARD_DOMAINS` 里其它域名若「改动前 200、改动后不是 200」则判定为事故并失败。
+### 首次签发证书（换机器时照抄）
+
+```bash
+sudo mkdir -p /var/www/certbot
+sudo certbot certonly --webroot -w /var/www/certbot -d yunshufz.top \
+  --deploy-hook "systemctl reload nginx"
+# 先只有 80 段的 vhost，证书签下来后再补 443 段（nginx 1.24 用 `listen 443 ssl http2`，
+# 不是 `http2 on`——后者要 1.25.1+）
+```
 
 ### 换域名 / 回滚
 
-- **换域名**：DNS 加 A 记录指向 `43.162.93.153` → 改 `content/site.mjs` 的 `company.domain` 与 `company.url` → `node tools/build.mjs` → 把仓库变量 `DOMAIN` 改成新域名 → push。旧的 `.caddy` 块不会自动删，需要到服务器上删掉再 reload。
-- **回滚**：`git revert` 后 push（文件会回到上一版）；想整站下线就删 `/opt/jinianren3d/caddy-sites/yunshufz.top.caddy` 再 reload。
-- **旧域名**：`ysfangzhou.xyz` 目前**没有**在本机 Caddy 上配置站点（那个域名此前没在这台机器上线过）。要一并启用，就再跑一次把 `DOMAIN` 临时指过去，或者在服务器上复制一份块改域名。
+- **换域名**：DNS A 记录指向本机 → 改 `content/site.mjs` 的 `company.domain` / `company.url` → `node tools/build.mjs` → 改 `deploy/nginx/yunshufz.top.conf` 里的 `server_name` 与证书路径 → 签证书 → push。
+- **回滚**：`git revert` 后 push；想整站下线就 `sudo rm /etc/nginx/conf.d/yunshufz.top.conf && sudo nginx -t && sudo systemctl reload nginx`。
+- **回到海外机**：Actions 里手动触发 `deploy-overseas`，再把 DNS 改回 `43.162.93.153`。
+
+### ⚠️ 备案
+
+这台是国内机，按要求域名需完成 **ICP 备案并接入该服务商**。目前 `ocrtext.top` 已备案，`yunshufz.top` **还没备案**——实测现在 80/443 都通，但未备案域名随时可能被服务商拦截（表现为突然打不开或弹出备案提示）。备案下来后要在服务商控制台做「备案接入」，域名继续指向本机即可。
 
 ## 六、Apple 组织账号审核自查清单
 

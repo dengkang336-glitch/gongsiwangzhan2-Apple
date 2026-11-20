@@ -52,15 +52,17 @@ python3 -m http.server 8800    # 本地预览
 - 首页产品横条在 ≤860 转成横向滚动（`flex` + `scroll-snap`），别改回 grid。
 - 截图/自测：`.reveal` 元素没进视口时 `opacity:0`，裁元素会拍到空白；全页截图先滚到底再回顶。
 
-## 部署（GitHub Actions → 自有服务器）
+## 部署（GitHub Actions → 国内服务器 nginx）
 
-线上：**https://yunshufz.top**，推 `main` 约 30 秒自动发布。细节见 `README.md` 第五节，这里只记必须知道的：
+线上：**https://yunshufz.top**，推 `main` 约 60 秒自动发布。细节见 `README.md` 第五节，这里只记必须知道的：
 
-- 本机到服务器 `43.162.93.153` 的 **22/80/443 全被阻断**，所以本地不可能手动 rsync / ssh 上去，一律走 GitHub。`curl https://yunshufz.top` 从本机超时是正常现象，别当成站点挂了。
-- 落点：宿主机 `/opt/jinianren3d/company-site/yunshufz`（容器内 `/srv/company/yunshufz`），配置 `/opt/jinianren3d/caddy-sites/yunshufz.top.caddy`。
-- **这台机器上还跑着 mamorialgrove.top**，所以工作流只做加法：独立子目录、独立 `.caddy`、`caddy validate` 过了才 `caddy reload`（**绝不 `docker restart`**，那会让所有站点瞬断）、失败自动删块回滚、发布后回查 guard 域名。
-- GitHub 仓库的 OAuth token **没有 `workflow` scope**，`gh` 走 https 推含 `.github/workflows/` 的提交会被拒；远端已改成 SSH（`git@github.com:dengkang336-glitch/gongsiwangzhan2-Apple.git`），别改回 https。
-- 换域名时三处同改：`content/site.mjs` 的 `company.domain` / `company.url`、仓库变量 `DOMAIN`、DNS A 记录。
+- 生产机是**国内**腾讯云 `129.204.52.104`（用户 `ubuntu`），宿主机 nginx 直接发静态文件，落点 `/var/www/yunshufz.top`，vhost 在 `/etc/nginx/conf.d/yunshufz.top.conf`；**仓库里的 `deploy/nginx/yunshufz.top.conf` 是权威副本**，工作流每次覆盖服务器那份。
+- 这台机器上还跑着 `ocrtext.top`（小程序后端，反代 `127.0.0.1:8081` 的容器）。所以：独立目录、独立 conf.d 文件、`nginx -t` 过了才 `systemctl reload`、**绝不 `systemctl restart nginx`**、发布后回查 `ocrtext.top` 仍是 200。
+- nginx 是 **1.24**：443 要写 `listen 443 ssl http2;`，`http2 on;` 是 1.25.1+ 的写法，写了 `nginx -t` 直接 emerg。
+- 证书 certbot webroot（`/var/www/certbot`），续期自动；域名换机器后要重新签发。
+- 海外机 `43.162.93.153`（Caddy + docker `jinianren-caddy`）保留为备用，workflow 是 `deploy-overseas.yml`，**只能手动触发**。
+- GitHub 仓库的 OAuth token **没有 `workflow` scope**，`gh` 走 https 推含 `.github/workflows/` 的提交会被拒；远端是 SSH（`git@github.com:dengkang336-glitch/gongsiwangzhan2-Apple.git`），别改回 https。
+- `yunshufz.top` **尚未 ICP 备案**（`ocrtext.top` 已备案）。大陆机跑未备案域名随时可能被拦，站长已知悉；备案下来后要做「备案接入」。
 
 ## 审核要点
 
