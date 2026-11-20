@@ -182,6 +182,12 @@ jobs:
                   format console
               }
           }
+
+          # www 与裸域都解析到本机；审核方常手输 www，统一用 308 收到裸域，
+          # 免得同一份内容出现两个地址（对 Apple 与 SEO 都更干净）。
+          www.$DOMAIN {
+              redir https://$DOMAIN{uri} 308
+          }
           EOF
           echo '--- 新站点块 ---'
           cat "$BLOCK"
@@ -248,6 +254,14 @@ jobs:
           case "$redir" in
             30[187]\ https://*) echo 'ok   301/307/308 到 https' ;;
             *) echo "::error::HTTP 没有正确跳转 HTTPS：$redir"; exit 1 ;;
+          esac
+
+          echo "--- www 要收到裸域 ---"
+          www=$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 20 "https://www.$DOMAIN/" 2>/dev/null || true)
+          echo "https://www.$DOMAIN/ -> ${www:-无}"
+          case "$www" in
+            30[18]\ https://$DOMAIN/*) echo 'ok   www 已 308/301 到裸域' ;;
+            *) echo "::warning::www 没有收到裸域（${www:-无}），若 DNS 未配 www 可忽略" ;;
           esac
 
           echo "--- 不存在的路径要回 404，不能软 404 ---"
