@@ -256,12 +256,20 @@ jobs:
             *) echo "::error::HTTP 没有正确跳转 HTTPS：$redir"; exit 1 ;;
           esac
 
-          echo "--- www 要收到裸域 ---"
-          www=$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 20 "https://www.$DOMAIN/" 2>/dev/null || true)
+          echo "--- www 要收到裸域（www 的证书是第一次签，给它 60s） ---"
+          www=''
+          for i in $(seq 1 12); do
+            www=$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 15 "https://www.$DOMAIN/" 2>/dev/null || true)
+            case "$www" in
+              30[18]\ https://$DOMAIN/*) break ;;
+            esac
+            echo "第 $i 次: ${www:-000}"
+            sleep 5
+          done
           echo "https://www.$DOMAIN/ -> ${www:-无}"
           case "$www" in
             30[18]\ https://$DOMAIN/*) echo 'ok   www 已 308/301 到裸域' ;;
-            *) echo "::warning::www 没有收到裸域（${www:-无}），若 DNS 未配 www 可忽略" ;;
+            *) echo "::warning::www 还没就绪（${www:-无}）：可能是证书还在签发，或在 DNS 上没这条 www 记录" ;;
           esac
 
           echo "--- 不存在的路径要回 404，不能软 404 ---"
