@@ -1,25 +1,24 @@
 name: deploy
 
-# 推 main 自动把本站部署到 43.162.93.153（静态站，由服务器上已有的 Caddy 容器发出）。
-# 本机（大陆）到这台境外服务器的 22/80/443 被阻断，所以走 GitHub 海外 runner 中转。
+# 推 main 自动把站点发到国内机（129.204.52.104，腾讯云），由宿主机 nginx 直接发静态文件。
+# 目标地址：https://yunshufz.top
 #
-# ⚠️ 这台服务器上还跑着别的站点（念园 memorialgrove3D、旧版公司站 ysfangzhou.xyz 等）。
-# 本工作流只做「加法」：
-#   - 自己的静态文件放进单独子目录，绝不动上一级已有的文件；
-#   - 自己的站点块写成单独文件，绝不改写别人的 .caddy；
-#   - reload 前先 `caddy validate`，校验不过就把自己的站点块删掉、不 reload、直接失败；
-#   - reload 后回查其它域名仍是 200，否则同样回滚并失败。
+# ⚠️ 这台机器上还跑着 ocrtext.top（小程序后端，/etc/nginx/conf.d/ocrtext.top.conf）。
+# 本工作流只做加法：
+#   - 只往 /var/www/yunshufz.top/ 写文件，不碰别的目录；
+#   - nginx 配置只写自己的 /etc/nginx/conf.d/yunshufz.top.conf；
+#   - 每次 reload 前先 `nginx -t`，不过就到此为止（nginx 仍在跑旧配置，别的站点无感）；
+#   - 只 `systemctl reload`，绝不 `restart`（restart 会让同机所有站点瞬断）；
+#   - 发布后回查 ocrtext.top，若从「改动前 200」变成「不是 200」就判定事故并失败。
 #
-# 需要的仓库 secrets（Settings → Secrets and variables → Actions）：
-#   DEPLOY_HOST      43.162.93.153
-#   DEPLOY_USER      ubuntu
-#   DEPLOY_SSH_KEY   部署私钥全文（与 jinianren3D / gongsiwangzhan 仓库里同一把）
-#   DEPLOY_PORT      可选，默认 22
-#
-# 需要的仓库 Variable：
-#   DOMAIN           yunshufz.top
-#   SITE_SUBDIR      可选，默认 yunshufz（决定落在容器挂载目录下哪个子目录）
-#   GUARD_DOMAINS    可选，空格分隔的其它站点域名，reload 后逐个回查（默认 ysfangzhou.xyz mamorialgrove.top）
+# 需要的仓库 secrets / variables：
+#   DEPLOY_HOST     129.204.52.104
+#   DEPLOY_USER     ubuntu
+#   DEPLOY_SSH_KEY  ~/.ssh/memorial_deploy 的内容（这台机器上 ubuntu 用户认可的那把）
+#   DEPLOY_PORT     可选，默认 22
+#   SITE_ROOT       可选，默认 /var/www/yunshufz.top
+#   NGINX_CONF      可选，默认 /etc/nginx/conf.d/yunshufz.top.conf
+#   GUARD_DOMAINS   可选，默认 ocrtext.top
 
 on:
   push:
@@ -30,22 +29,20 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-yunshufz
+  group: deploy-cn
   cancel-in-progress: false
+
+env:
+  DOMAIN: yunshufz.top
+  SITE_ROOT: ${{ vars.SITE_ROOT || '/var/www/yunshufz.top' }}
+  GUARD_DOMAINS: ${{ vars.GUARD_DOMAINS || 'ocrtext.top' }}
 
 jobs:
   deploy:
-    name: 部署 yunshufz.top（静态站）
+    name: 部署 yunshufz.top（国内机 nginx）
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      DOMAIN: ${{ vars.DOMAIN || 'yunshufz.top' }}
-      SITE_SUBDIR: ${{ vars.SITE_SUBDIR || 'yunshufz' }}
-      GUARD_DOMAINS: ${{ vars.GUARD_DOMAINS || 'ysfangzhou.xyz mamorialgrove.top' }}
-      CADDY_DIR: /opt/jinianren3d/caddy-sites
-      CADDY_CONTAINER: jinianren-caddy
-
     steps:
       # v4.3.0 —— 官方建议按 commit SHA 固定，避免 tag 被移动
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -54,7 +51,7 @@ jobs:
 
       - name: 准备 SSH
         env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || '43.162.93.153' }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER || 'ubuntu' }}
@@ -67,7 +64,8 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
-          ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" \
+            >> ~/.ssh/known_hosts 2>/dev/null
           {
             echo "Host deploy"
             echo "  HostName $DEPLOY_HOST"
@@ -82,7 +80,6 @@ jobs:
           if ! ssh -o BatchMode=yes deploy true 2>/tmp/ssh.err; then
             echo '::error::SSH 公钥登录失败，下面是客户端看到的原话'
             tail -5 /tmp/ssh.err
-            echo '--- 服务器认可哪些认证方式、我们递了哪把钥匙 ---'
             ssh -vv -o BatchMode=yes deploy true 2>&1 \
               | grep -Ei 'Offering|Authentications that can|Next authentication|Server accepts|sign_and_send|Load key' \
               | tail -12 || true
@@ -91,26 +88,24 @@ jobs:
           ssh deploy 'echo "ssh ok"; hostname; whoami'
 
       - name: 侦察（只读，不改任何东西）
-        id: probe
         run: |
           set -euo pipefail
-          ssh deploy "CADDY_CONTAINER='$CADDY_CONTAINER' bash -s" <<'REMOTE' | tee /tmp/probe.txt
+          ssh deploy "bash -s" <<'REMOTE'
           set -uo pipefail
-          echo '--- 容器挂载 ---'
-          docker inspect "$CADDY_CONTAINER" \
-            --format '{{range .Mounts}}{{.Source}} -> {{.Destination}} ({{.Type}}){{"\n"}}{{end}}' 2>/dev/null \
-            || echo 'docker inspect 失败'
-          echo '--- 现有站点块 ---'
-          ls -1 /opt/jinianren3d/caddy-sites/ 2>/dev/null || echo '目录不存在'
-          echo '--- Caddyfile ---'
-          docker exec "$CADDY_CONTAINER" cat /etc/caddy/Caddyfile 2>/dev/null || echo '读不到 Caddyfile'
-          echo '--- 80/443 谁在听 ---'
-          (sudo ss -ltnp 2>/dev/null || ss -ltn 2>/dev/null) | grep -E ':(80|443) ' || echo '看不到'
+          echo '--- nginx ---'
+          nginx -v 2>&1
+          sudo nginx -t 2>&1 | tail -2
+          echo '--- conf.d ---'
+          ls -1 /etc/nginx/conf.d/ 2>/dev/null
+          echo '--- 本站目录 ---'
+          ls -1d /var/www/* 2>/dev/null
+          echo '--- 证书 ---'
+          sudo certbot certificates 2>/dev/null | grep -E 'Certificate Name|Domains|Expiry' | head -10
           echo '--- 磁盘 ---'
-          df -h /opt | tail -1
+          df -h / | tail -1
           REMOTE
 
-          # 改动前先记下同机其它站点的状态：只有“原本正常、之后不正常”才算我们弄坏的
+          # 改动前先记下同机其它站点的状态：只有「原本正常、之后不正常」才算我们弄坏的
           : > /tmp/baseline.txt
           for d in $GUARD_DOMAINS; do
             code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "https://$d/" 2>/dev/null || true)
@@ -119,111 +114,54 @@ jobs:
           echo '--- 改动前基线 ---'
           cat /tmp/baseline.txt
 
-          # 从挂载里找出承载静态站的宿主机目录（优先 company-site）
-          SRC="$(grep -oE '/[^ ]*company-site -> [^ ]*' /tmp/probe.txt | head -1 | cut -d' ' -f1)"
-          if [ -z "$SRC" ]; then
-            echo '::warning::没在挂载里找到 company-site，回退到 /opt/jinianren3d/company-site'
-            SRC=/opt/jinianren3d/company-site
-          fi
-          echo "host_root=$SRC" >> "$GITHUB_OUTPUT"
-          echo "静态站宿主机目录：$SRC"
-          # 站点块目录若不存在，用同一套约定
-          echo "站点块：$CADDY_DIR"
-
-      - name: 同步静态文件（只写自己的子目录）
-        env:
-          HOST_ROOT: ${{ steps.probe.outputs.host_root }}
+      - name: 同步静态文件（只写自己的目录）
         run: |
           set -euo pipefail
-          TARGET="$HOST_ROOT/$SITE_SUBDIR"
-          ssh deploy "sudo mkdir -p '$TARGET' && sudo chown -R \"\$USER:\$USER\" '$TARGET'"
-          # 只放「给浏览器看」的东西进来：生成器源码、文档、隐藏文件一律不上服务器
+          ssh deploy "mkdir -p '$SITE_ROOT'"
+          # 只放「给浏览器看」的东西：生成器源码、文档、隐藏文件一律不上服务器
           rsync -az --delete \
             --exclude '.*' \
             --exclude 'content' --exclude 'tools' \
             --exclude '*.md' --exclude 'package.json' \
-            ./ deploy:"$TARGET/"
-          # --delete 不会删被 exclude 的文件，历史遗留的开发文件手动清一遍
-          ssh deploy "find '$TARGET' -maxdepth 1 -type f \
-            \\( -name '.*' -o -name '*.md' \\) -delete 2>/dev/null; true"
-          echo "已同步到 $TARGET"
-          ssh deploy "find '$TARGET' -maxdepth 1 | head -12; echo '...'; du -sh '$TARGET'"
+            ./ deploy:"$SITE_ROOT/"
+          ssh deploy "find '$SITE_ROOT' -maxdepth 1 -type f \
+            \( -name '.*' -o -name '*.md' \) -delete 2>/dev/null; true"
+          echo "已同步到 $SITE_ROOT"
+          ssh deploy "du -sh '$SITE_ROOT'; find '$SITE_ROOT' -maxdepth 1 -type f | wc -l"
 
-      - name: 写站点块 → validate → reload（失败即回滚）
-        env:
-          HOST_ROOT: ${{ steps.probe.outputs.host_root }}
+      - name: 同步 vhost 配置（仓库为准）
         run: |
           set -euo pipefail
-          # 宿主机目录 → 容器内路径
-          CONTAINER_ROOT="$(grep -F "$HOST_ROOT ->" /tmp/probe.txt | sed -E 's/.* -> ([^ ]+) \(.*/\1/')"
-          if [ -z "$CONTAINER_ROOT" ]; then
-            echo '::error::无法把宿主机目录映射到容器内路径，放弃（不改动任何 Caddy 配置）'
+          # nginx 配置也进仓库，改动可 review、可回滚；服务器上那份只是它的副本。
+          ssh deploy "sudo cat > /etc/nginx/conf.d/yunshufz.top.conf" < deploy/nginx/yunshufz.top.conf
+          ssh deploy "sudo chmod 644 /etc/nginx/conf.d/yunshufz.top.conf && wc -l /etc/nginx/conf.d/yunshufz.top.conf"
+
+      - name: 校验并 reload nginx（失败即止，不重启）
+        run: |
+          set -euo pipefail
+          ssh deploy "bash -s" <<'REMOTE'
+          set -euo pipefail
+          echo '--- nginx -t ---'
+          # 配置不过就到此为止：nginx 继续跑旧配置，同机其它站点不受影响
+          if ! sudo nginx -t; then
+            echo '::error::nginx 配置校验失败，未 reload（现网配置未变）'
             exit 1
           fi
-          echo "容器内路径：${CONTAINER_ROOT}/${SITE_SUBDIR}"
-
-          ssh deploy "DOMAIN='$DOMAIN' ROOT='${CONTAINER_ROOT}/${SITE_SUBDIR}' BLOCK='$CADDY_DIR/$DOMAIN.caddy' CADDY='$CADDY_CONTAINER' bash -s" <<'REMOTE'
-          set -euo pipefail
-          mkdir -p "$(dirname "$BLOCK")"
-          cat > "$BLOCK" <<EOF
-          # 由 GitHub Actions 生成（仓库 gongsiwangzhan2-Apple），请勿手改。
-          # 静态文件：$ROOT
-          $DOMAIN {
-              encode gzip zstd
-              root * $ROOT
-              try_files {path} {path}/index.html {path}.html
-              file_server
-              handle_errors {
-                  rewrite * /{err.status_code}.html
-                  file_server
-              }
-              log {
-                  output stdout
-                  format console
-              }
-          }
-
-          # www 与裸域都解析到本机；审核方常手输 www，统一用 308 收到裸域，
-          # 免得同一份内容出现两个地址（对 Apple 与 SEO 都更干净）。
-          www.$DOMAIN {
-              redir https://$DOMAIN{uri} 308
-          }
-          EOF
-          echo '--- 新站点块 ---'
-          cat "$BLOCK"
-
-          rollback() {
-            echo '::warning::回滚：删除本次新增的站点块'
-            rm -f "$BLOCK"
-            docker exec "$CADDY" caddy reload --config /etc/caddy/Caddyfile >/dev/null 2>&1 || true
-          }
-          trap 'rollback' ERR
-
-          echo '--- caddy validate ---'
-          if ! docker exec "$CADDY" caddy validate \
-                --config /etc/caddy/Caddyfile --adapter caddyfile; then
-            echo '::error::Caddyfile 校验失败（新站点块语法问题），已回滚'
-            rollback; trap - ERR; exit 1
-          fi
-
-          echo '--- caddy reload（graceful，不断开现有站点） ---'
-          # 只 reload，不 restart：restart 会让这台机器上所有站点瞬断。
-          docker exec "$CADDY" caddy reload --config /etc/caddy/Caddyfile
+          echo '--- reload（graceful） ---'
+          sudo systemctl reload nginx
+          sleep 1
+          systemctl is-active nginx
           REMOTE
 
-      - name: 自检（新域名 200 + 其它站点仍 200）
+      - name: 自检（新域名 200 + 内容 + 其它站点仍 200）
         run: |
           set -euo pipefail
-          echo "--- $DOMAIN 首页（等 Caddy 签发证书，最多 120s） ---"
-          ok=0
-          for i in $(seq 1 24); do
-            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "https://$DOMAIN/" 2>/dev/null || true)
-            echo "第 $i 次: HTTP ${code:-000}"
-            if [ "$code" = "200" ]; then ok=1; break; fi
-            sleep 5
-          done
+          echo "--- $DOMAIN 首页 ---"
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 25 "https://$DOMAIN/" 2>/dev/null || true)
+          echo "https://$DOMAIN/ -> ${code:-000}"
+          [ "$code" = "200" ] || { echo "::error::首页不是 200"; exit 1; }
 
-          echo "--- $DOMAIN 关键页面 ---"
+          echo "--- 关键页面 ---"
           for page in / /products.html /products/vivace.html /products/palmglow.html \
                       /products/shiyin.html /products/grove.html /en/ /en/products.html \
                       /about.html /support.html /privacy.html /terms.html \
@@ -252,34 +190,18 @@ jobs:
           redir=$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 20 "http://$DOMAIN/")
           echo "http://$DOMAIN/ -> $redir"
           case "$redir" in
-            30[187]\ https://*) echo 'ok   301/307/308 到 https' ;;
+            30[18]\ https://*) echo 'ok   301/308 到 https' ;;
             *) echo "::error::HTTP 没有正确跳转 HTTPS：$redir"; exit 1 ;;
           esac
 
-          echo "--- www 要收到裸域（www 的证书是第一次签，给它 60s） ---"
-          www=''
-          for i in $(seq 1 12); do
-            www=$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 15 "https://www.$DOMAIN/" 2>/dev/null || true)
-            case "$www" in
-              30[18]\ https://$DOMAIN/*) break ;;
-            esac
-            echo "第 $i 次: ${www:-000}"
-            sleep 5
-          done
-          echo "https://www.$DOMAIN/ -> ${www:-无}"
-          case "$www" in
-            30[18]\ https://$DOMAIN/*) echo 'ok   www 已 308/301 到裸域' ;;
-            *) echo "::warning::www 还没就绪（${www:-无}）：可能是证书还在签发，或在 DNS 上没这条 www 记录" ;;
-          esac
+          echo "--- 证书 ---"
+          echo | openssl s_client -servername "$DOMAIN" -connect "$DOMAIN:443" 2>/dev/null \
+            | openssl x509 -noout -issuer -dates 2>/dev/null || echo '读不到证书'
 
-          echo "--- 不存在的路径要回 404，不能软 404 ---"
+          echo "--- 不存在的路径要回 404 ---"
           code404=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "https://$DOMAIN/definitely-not-here-$(date +%s)")
           echo "/definitely-not-here -> $code404"
           [ "$code404" = "404" ] || echo "::warning::404 页返回了 $code404（软 404，不影响审核但不够干净）"
-
-          echo "--- 压缩是否生效 ---"
-          enc=$(curl -sS -o /dev/null -D - -H 'Accept-Encoding: gzip' --max-time 20 "https://$DOMAIN/" | grep -i '^content-encoding' || true)
-          echo "${enc:-没有 content-encoding}"
 
           echo "--- 回归检查：其它站点不能比改动前更差 ---"
           broken=0
@@ -289,13 +211,6 @@ jobs:
             echo "$d  改动前=$before  现在=${after:-000}"
             if [ "$before" = "200" ] && [ "$after" != "200" ]; then broken=1; fi
           done < /tmp/baseline.txt
+          [ "$broken" = "0" ] || { echo '::error::同机其它站点状态变差，请立刻检查 nginx'; exit 1; }
 
-          if [ "$ok" != "1" ]; then
-            echo "::error::$DOMAIN 120 秒内未返回 200：多半是 DNS 未指向本机、或 80/443 被占用导致 ACME 签发失败"
-            exit 1
-          fi
-          if [ "$broken" != "0" ]; then
-            echo '::error::有其它站点没返回 200，说明这次改动疑似影响了同机其它站点，请立刻检查 Caddy 日志'
-            exit 1
-          fi
           echo '✅ 部署完成，同机其它站点正常'
