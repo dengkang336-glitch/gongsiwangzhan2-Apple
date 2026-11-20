@@ -11,7 +11,7 @@ export const privacy = {
       {
         h: "1. 适用范围",
         p: [
-          "本政策适用于 <b>ysfangzhou.xyz</b> 网站，以及我们发布并标注适用本政策的 iOS、iPadOS、macOS 应用与 Web 产品。第三方网站或服务（包括 App Store 本身）按其各自的隐私政策处理数据。",
+          "本政策适用于 <b>yunshufz.top</b> 网站，以及我们发布并标注适用本政策的 iOS、iPadOS、macOS 应用与 Web 产品。第三方网站或服务（包括 App Store 本身）按其各自的隐私政策处理数据。",
         ],
       },
       {
@@ -106,7 +106,7 @@ export const privacy = {
       {
         h: "1. Scope",
         p: [
-          "This policy covers <b>ysfangzhou.xyz</b> and the iOS, iPadOS, macOS and web products we publish under it. Third-party sites and services — including the App Store itself — handle data under their own privacy policies.",
+          "This policy covers <b>yunshufz.top</b> and the iOS, iPadOS, macOS and web products we publish under it. Third-party sites and services — including the App Store itself — handle data under their own privacy policies.",
         ],
       },
       {
@@ -197,7 +197,7 @@ export const privacy = {
 export const terms = {
   zh: {
     intro: [
-      "本条款适用于你使用广州云枢方舟科技有限公司（下称「我们」）运营的 ysfangzhou.xyz 网站，以及通过该网站了解或获取的产品与服务。使用本网站即表示你接受本条款。",
+      "本条款适用于你使用广州云枢方舟科技有限公司（下称「我们」）运营的 yunshufz.top 网站，以及通过该网站了解或获取的产品与服务。使用本网站即表示你接受本条款。",
     ],
     sections: [
       {
@@ -283,7 +283,7 @@ export const terms = {
   },
   en: {
     intro: [
-      "These terms apply to your use of ysfangzhou.xyz, operated by Guangzhou Yunshu Ark Technology Co., Ltd. (\"we\", \"us\"), and to the products and services described on it. By using this site you accept these terms.",
+      "These terms apply to your use of yunshufz.top, operated by Guangzhou Yunshu Ark Technology Co., Ltd. (\"we\", \"us\"), and to the products and services described on it. By using this site you accept these terms.",
     ],
     sections: [
       {

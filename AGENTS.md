@@ -9,7 +9,7 @@
    - `/about`「工商与联系信息」表
    - `/privacy` 与 `/terms` 落款
 
-   现值：广州云枢方舟科技有限公司 / Guangzhou Yunshu Ark Technology Co., Ltd. / 广州市花都区建设北路 190 号亿能大厦 1207 室 A293 / support@ysfangzhou.xyz / ysfangzhou.xyz
+   现值：广州云枢方舟科技有限公司 / Guangzhou Yunshu Ark Technology Co., Ltd. / 广州市花都区建设北路 190 号亿能大厦 1207 室 A293 / support@ysfangzhou.xyz（已在用的真实邮箱）/ 线上域名 yunshufz.top
 2. **不出现竞品名称与商标**。站上这批产品属复刻类，功能可参考公开信息，视觉/文案/图标/代码必须原创。
 3. **不出现「独立开发者 / 个人工作室 / 个人接单」**这类与公司主体矛盾的表述。
 4. 隐私政策要**逐款**写明数据范围（是否上云、留存多久、第三方、跨境、删除方式），不能只写一段通稿——审核会拿它跟 App 的隐私清单对。
@@ -52,8 +52,17 @@ python3 -m http.server 8800    # 本地预览
 - 首页产品横条在 ≤860 转成横向滚动（`flex` + `scroll-snap`），别改回 grid。
 - 截图/自测：`.reveal` 元素没进视口时 `opacity:0`，裁元素会拍到空白；全页截图先滚到底再回顶。
 
-## 部署与审核
+## 部署（GitHub Actions → 自有服务器）
 
-- 纯静态，根目录整份上传即可（`content/`、`tools/` 不是运行必需但要留着）。
+线上：**https://yunshufz.top**，推 `main` 约 30 秒自动发布。细节见 `README.md` 第五节，这里只记必须知道的：
+
+- 本机到服务器 `43.162.93.153` 的 **22/80/443 全被阻断**，所以本地不可能手动 rsync / ssh 上去，一律走 GitHub。`curl https://yunshufz.top` 从本机超时是正常现象，别当成站点挂了。
+- 落点：宿主机 `/opt/jinianren3d/company-site/yunshufz`（容器内 `/srv/company/yunshufz`），配置 `/opt/jinianren3d/caddy-sites/yunshufz.top.caddy`。
+- **这台机器上还跑着 mamorialgrove.top**，所以工作流只做加法：独立子目录、独立 `.caddy`、`caddy validate` 过了才 `caddy reload`（**绝不 `docker restart`**，那会让所有站点瞬断）、失败自动删块回滚、发布后回查 guard 域名。
+- GitHub 仓库的 OAuth token **没有 `workflow` scope**，`gh` 走 https 推含 `.github/workflows/` 的提交会被拒；远端已改成 SSH（`git@github.com:dengkang336-glitch/gongsiwangzhan2-Apple.git`），别改回 https。
+- 换域名时三处同改：`content/site.mjs` 的 `company.domain` / `company.url`、仓库变量 `DOMAIN`、DNS A 记录。
+
+## 审核要点
+
 - **必须 HTTPS，且能从境外打开**——审核在境外访问，只对大陆可见或证书异常会直接卡住。
 - 提交前对照 `README.md` 第六节的自查清单逐条过。

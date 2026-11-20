@@ -72,26 +72,60 @@ python3 -m http.server 8800
 
 产品截图放在 `assets/img/`，命名 `<slug>-01.jpg`……。换图后确认长宽比仍是竖图 620×1344 或宽图 1280×800，否则卡片会被裁切。
 
-## 五、部署
+## 五、部署（GitHub Actions → 自有服务器，已上线）
 
-站点是纯静态文件，**根目录整份上传即可**（`content/`、`tools/` 不是运行必需，但建议一起留着，方便以后改）。
+线上地址：**https://yunshufz.top**（Let's Encrypt 证书由服务器上的 Caddy 自动签发、自动续期）
 
-三种常见做法：
+为什么绕 GitHub：本机（大陆联通）到这台服务器的 **22 / 80 / 443 全被阻断**（`curl` 直接超时），GitHub 的 runner 在海外，到同机房线路通畅。所以推 `main` 就等于发布：工作流在 GitHub 那边登录服务器、同步文件、重载 Caddy，全部动作不需要本机能连上服务器。
 
-1. **复用现有服务器（推荐，域名不变）**
-   之前为旧版公司站准备好的机器与域名（`ysfangzhou.xyz`）可以继续用：把本目录 rsync 到原来的站点目录，Caddy / Nginx 指向它，只换文件不动配置。
+```
+git add -A && git commit -m "..." && git push origin main
+→ Actions「deploy」跑约 30 秒，站点更新
+```
 
-   ```bash
-   rsync -avz --delete --exclude .git ./ user@host:/opt/company-site/
-   ```
+也可以在 Actions 页面点 **Run workflow** 手动发布一次。
 
-2. **静态托管**（Cloudflare Pages / Netlify / Vercel / GitHub Pages）
-   构建命令留空，发布目录填 `/`（根目录）。随后在托管面板绑定域名并开启 HTTPS。
+### 服务器上的落点
 
-3. **对象存储 + CDN**（OSS / COS + 全站加速）
-   需要把 `404.html` 配成自定义错误页。
+| 东西 | 位置 |
+| --- | --- |
+| 服务器 | `43.162.93.153`（用户 `ubuntu`），同机还跑着 mamorialgrove.top |
+| 静态文件（宿主机） | `/opt/jinianren3d/company-site/yunshufz` |
+| 静态文件（容器内） | `/srv/company/yunshufz`（Caddy 容器 `jinianren-caddy` 的 bind mount） |
+| 站点配置 | `/opt/jinianren3d/caddy-sites/yunshufz.top.caddy`（由工作流生成，别手改） |
+| 配置入口 | `/opt/jinianren3d/Caddyfile`，最后一行 `import /etc/caddy/sites/*.caddy` |
 
-无论哪种：**必须 HTTPS，且能从境外正常打开**。Apple 审核团队在境外访问，站点如果只对大陆网络可见、或证书错误，会直接卡在「网站无法访问」。
+`content/`、`tools/`、`*.md`、隐藏文件都**不会**同步上去，服务器上只有能直接给浏览器看的东西。
+
+### 仓库里的配置
+
+Settings → Secrets and variables → Actions：
+
+| 名称 | 类型 | 值 |
+| --- | --- | --- |
+| `DEPLOY_HOST` | secret | `43.162.93.153` |
+| `DEPLOY_USER` | secret | `ubuntu` |
+| `DEPLOY_SSH_KEY` | secret | 部署私钥全文（与 memorialgrove / 旧公司站用的同一把） |
+| `DEPLOY_PORT` | secret（可选） | 默认 `22` |
+| `DOMAIN` | variable | `yunshufz.top` |
+| `SITE_SUBDIR` | variable（可选） | 默认 `yunshufz` |
+| `GUARD_DOMAINS` | variable（可选） | 默认 `ysfangzhou.xyz mamorialgrove.top`，发布后逐个回查 |
+
+### 不影响同机其它站点（这是硬要求）
+
+工作流只做加法，且每一步都带护栏：
+
+1. 静态文件进**独立子目录**，`rsync --delete` 的作用域只到 `.../company-site/yunshufz/`；
+2. 站点配置写**独立文件**，从不改写别人的 `.caddy`；
+3. 重载前先 `caddy validate` —— 语法有问题就删掉自己的块、不重载、直接失败；
+4. **只 `caddy reload`，不 `docker restart`**（restart 会让同机所有站点瞬断）；
+5. 发布后自检：新域名关键页面 200 + 内容抽检（公司全称、地址、canonical）+ HTTP 必跳 HTTPS；`GUARD_DOMAINS` 里其它域名若「改动前 200、改动后不是 200」则判定为事故并失败。
+
+### 换域名 / 回滚
+
+- **换域名**：DNS 加 A 记录指向 `43.162.93.153` → 改 `content/site.mjs` 的 `company.domain` 与 `company.url` → `node tools/build.mjs` → 把仓库变量 `DOMAIN` 改成新域名 → push。旧的 `.caddy` 块不会自动删，需要到服务器上删掉再 reload。
+- **回滚**：`git revert` 后 push（文件会回到上一版）；想整站下线就删 `/opt/jinianren3d/caddy-sites/yunshufz.top.caddy` 再 reload。
+- **旧域名**：`ysfangzhou.xyz` 目前**没有**在本机 Caddy 上配置站点（那个域名此前没在这台机器上线过）。要一并启用，就再跑一次把 `DOMAIN` 临时指过去，或者在服务器上复制一份块改域名。
 
 ## 六、Apple 组织账号审核自查清单
 

@@ -18,8 +18,8 @@ export const company = {
   email: "support@ysfangzhou.xyz",
   // 电话：有就填，留空则整行不渲染（Apple 报名表里还需要单独填电话）。
   phone: "",
-  domain: "ysfangzhou.xyz",
-  url: "https://ysfangzhou.xyz",
+  domain: "yunshufz.top",
+  url: "https://yunshufz.top",
   // 成立时间：按营业执照填（例："2024"）。留空则工商信息表不出现这一行。
   founded: "",
   // 备案号：有就填（例：粤ICP备2026xxxxxx号），留空则页脚不出现这一条。

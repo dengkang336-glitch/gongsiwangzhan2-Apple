@@ -137,11 +137,15 @@ jobs:
           set -euo pipefail
           TARGET="$HOST_ROOT/$SITE_SUBDIR"
           ssh deploy "sudo mkdir -p '$TARGET' && sudo chown -R \"\$USER:\$USER\" '$TARGET'"
+          # 只放「给浏览器看」的东西进来：生成器源码、文档、隐藏文件一律不上服务器
           rsync -az --delete \
-            --exclude '.git' --exclude '.github' --exclude '.gitignore' \
-            --exclude '.DS_Store' --exclude 'content' --exclude 'tools' \
-            --exclude 'AGENTS.md' --exclude 'README.md' \
+            --exclude '.*' \
+            --exclude 'content' --exclude 'tools' \
+            --exclude '*.md' --exclude 'package.json' \
             ./ deploy:"$TARGET/"
+          # --delete 不会删被 exclude 的文件，历史遗留的开发文件手动清一遍
+          ssh deploy "find '$TARGET' -maxdepth 1 -type f \
+            \\( -name '.*' -o -name '*.md' \\) -delete 2>/dev/null; true"
           echo "已同步到 $TARGET"
           ssh deploy "find '$TARGET' -maxdepth 1 | head -12; echo '...'; du -sh '$TARGET'"
 
@@ -214,10 +218,46 @@ jobs:
           done
 
           echo "--- $DOMAIN 关键页面 ---"
-          for page in / /products.html /products/palmglow.html /en/ /about.html /support.html /privacy.html /terms.html /robots.txt /sitemap.xml; do
-            printf '%-28s -> ' "$page"
+          for page in / /products.html /products/vivace.html /products/palmglow.html \
+                      /products/shiyin.html /products/grove.html /en/ /en/products.html \
+                      /about.html /support.html /privacy.html /terms.html \
+                      /robots.txt /sitemap.xml; do
+            printf '%-30s -> ' "$page"
             curl -fsS -o /dev/null -w '%{http_code}\n' --max-time 20 "https://$DOMAIN$page" || echo 'FAIL'
           done
+
+          echo "--- 内容抽检（不只是 200，还要是这一版） ---"
+          home=$(curl -fsS --max-time 20 "https://$DOMAIN/")
+          check() {
+            if printf '%s' "$home" | grep -qF "$1"; then
+              echo "ok   $2"
+            else
+              echo "FAIL $2（页面里找不到：$1）"
+              exit 1
+            fi
+          }
+          check '广州云枢方舟科技有限公司' '公司全称与执照一致'
+          check '190 号亿能大厦 1207 室 A293' '注册地址'
+          check "https://$DOMAIN/" 'canonical 指向本站'
+          check 'support@' '联系方式'
+          check 'PalmGlow' '产品（掌光）'
+
+          echo "--- HTTP 必须跳 HTTPS ---"
+          redir=$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 20 "http://$DOMAIN/")
+          echo "http://$DOMAIN/ -> $redir"
+          case "$redir" in
+            30[187]\ https://*) echo 'ok   301/307/308 到 https' ;;
+            *) echo "::error::HTTP 没有正确跳转 HTTPS：$redir"; exit 1 ;;
+          esac
+
+          echo "--- 不存在的路径要回 404，不能软 404 ---"
+          code404=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "https://$DOMAIN/definitely-not-here-$(date +%s)")
+          echo "/definitely-not-here -> $code404"
+          [ "$code404" = "404" ] || echo "::warning::404 页返回了 $code404（软 404，不影响审核但不够干净）"
+
+          echo "--- 压缩是否生效 ---"
+          enc=$(curl -sS -o /dev/null -D - -H 'Accept-Encoding: gzip' --max-time 20 "https://$DOMAIN/" | grep -i '^content-encoding' || true)
+          echo "${enc:-没有 content-encoding}"
 
           echo "--- 回归检查：其它站点不能比改动前更差 ---"
           broken=0
