@@ -133,7 +133,8 @@ jobs:
         run: |
           set -euo pipefail
           # nginx 配置也进仓库，改动可 review、可回滚；服务器上那份只是它的副本。
-          ssh deploy "sudo cat > /etc/nginx/conf.d/yunshufz.top.conf" < deploy/nginx/yunshufz.top.conf
+          # 用 sudo tee：`sudo cat >` 的重定向由普通用户 shell 执行，会 Permission denied
+          ssh deploy "sudo tee /etc/nginx/conf.d/yunshufz.top.conf > /dev/null" < deploy/nginx/yunshufz.top.conf
           ssh deploy "sudo chmod 644 /etc/nginx/conf.d/yunshufz.top.conf && wc -l /etc/nginx/conf.d/yunshufz.top.conf"
 
       - name: 校验并 reload nginx（失败即止，不重启）
