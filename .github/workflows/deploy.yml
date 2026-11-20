@@ -94,7 +94,7 @@ jobs:
         id: probe
         run: |
           set -euo pipefail
-          ssh deploy "bash -s" <<'REMOTE' | tee /tmp/probe.txt
+          ssh deploy "CADDY_CONTAINER='$CADDY_CONTAINER' bash -s" <<'REMOTE' | tee /tmp/probe.txt
           set -uo pipefail
           echo '--- 容器挂载 ---'
           docker inspect "$CADDY_CONTAINER" \
@@ -104,6 +104,10 @@ jobs:
           ls -1 /opt/jinianren3d/caddy-sites/ 2>/dev/null || echo '目录不存在'
           echo '--- Caddyfile ---'
           docker exec "$CADDY_CONTAINER" cat /etc/caddy/Caddyfile 2>/dev/null || echo '读不到 Caddyfile'
+          echo '--- 80/443 谁在听 ---'
+          (sudo ss -ltnp 2>/dev/null || ss -ltn 2>/dev/null) | grep -E ':(80|443) ' || echo '看不到'
+          echo '--- 磁盘 ---'
+          df -h /opt | tail -1
           REMOTE
 
           # 改动前先记下同机其它站点的状态：只有“原本正常、之后不正常”才算我们弄坏的
