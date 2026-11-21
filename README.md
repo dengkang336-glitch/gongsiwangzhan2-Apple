@@ -72,9 +72,9 @@ python3 -m http.server 8800
 
 产品截图放在 `assets/img/`，命名 `<slug>-01.jpg`……。换图后确认长宽比仍是竖图 620×1344 或宽图 1280×800，否则卡片会被裁切。
 
-## 五、部署（GitHub Actions → 国内服务器，已上线）
+## 五、部署（GitHub Actions → 国内服务器 nginx）
 
-线上地址：**https://yunshufz.top**（Let's Encrypt 证书，certbot webroot 申请，`certbot.timer` 自动续期）
+设计上的线上地址：**https://yunshufz.top**（Let's Encrypt 证书，certbot webroot 申请，`certbot.timer` 自动续期）
 
 > **当前状态（2026-11-21）：整站已暂停对外访问。** 用户在 DNS 侧移除了 `yunshufz.top` 的 A 记录，服务器上的 `/var/www/yunshufz.top`、`conf.d/yunshufz.top.conf` 与 Let's Encrypt 证书也已清理；`SITE_STATE=paused` 保留在仓库变量里，`deploy.yml` 的 vhost 也是暂停版（全站 503 + 维护页）。
 >
@@ -106,6 +106,7 @@ python3 -m http.server 8800
 | `DEPLOY_PORT` | secret（可选） | 默认 `22` |
 | `SITE_ROOT` | variable | `/var/www/yunshufz.top` |
 | `GUARD_DOMAINS` | variable | `ocrtext.top` |
+| `SITE_STATE` | variable | `live`（正常）/ `paused`（全站 503 + 维护页）。与 `deploy/nginx/yunshufz.top.conf` 必须一致 |
 
 ### 不影响同机其它站点
 
