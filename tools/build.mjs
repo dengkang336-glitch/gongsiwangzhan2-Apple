@@ -891,6 +891,76 @@ function notFoundPage(lang) {
   });
 }
 
+/* 暂停页：整站暂停时 nginx 用它当 503 的 body。
+   刻意不引用 assets/ 里任何东西（暂停期间静态资源同样 503），样式全部内联。 */
+function maintenancePage() {
+  return `<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>${esc(company.brandZh)} · 站点维护中</title>
+<style>
+  :root { color-scheme: light }
+  * { box-sizing: border-box }
+  html, body { height: 100% }
+  body {
+    margin: 0;
+    display: grid;
+    place-items: center;
+    padding: 32px 22px;
+    background: #f4f1e9;
+    color: #16181b;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+      "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .box { width: 100%; max-width: 560px }
+  .mark { width: 38px; height: 38px; color: #16181b; margin-bottom: 30px }
+  .code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
+    color: #b0392a; margin: 0 0 14px;
+  }
+  h1 {
+    font-family: "Songti SC", "Source Han Serif SC", "Noto Serif SC", serif;
+    font-size: clamp(30px, 6vw, 42px);
+    font-weight: 600; line-height: 1.24; letter-spacing: .01em;
+    margin: 0 0 18px;
+  }
+  h1 em { font-style: normal; color: #b0392a }
+  p { margin: 0 0 12px; font-size: 15px; line-height: 1.8; color: #4b4d52; max-width: 46ch }
+  .en { font-size: 13px; color: #6f6d64; line-height: 1.75 }
+  hr { border: 0; border-top: 1px solid rgba(22,24,27,.14); margin: 30px 0 22px }
+  a { color: #16181b; text-decoration: none; border-bottom: 1px solid rgba(22,24,27,.32) }
+  a:hover { color: #b0392a; border-bottom-color: #b0392a }
+  .foot {
+    margin-top: 34px; display: flex; flex-wrap: wrap; gap: 8px 18px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px; letter-spacing: .04em; color: #6f6d64;
+  }
+</style>
+</head>
+<body>
+  <div class="box">
+    ${MARK("mark")}
+    <p class="code">HTTP 503 · Maintenance</p>
+    <h1>站点正在维护<em>，</em><br>请稍后再访问。</h1>
+    <p>${esc(company.brandZh)}的网站正在进行例行维护，预计很快恢复。给你带来不便，抱歉。</p>
+    <p class="en">This site is temporarily down for maintenance. Please check back shortly.</p>
+    <hr>
+    <p class="en">需要联系我们：<a href="mailto:${esc(company.email)}">${esc(company.email)}</a></p>
+    <div class="foot">
+      <span>${esc(company.legalNameZh)}</span>
+      <span>${esc(company.legalNameEn)}</span>
+    </div>
+  </div>
+</body>
+</html>
+`;
+}
+
 /* ---------------- output ---------------- */
 
 async function write(relPath, content) {
@@ -942,6 +1012,7 @@ async function main() {
 ${urls.join("\n")}
 </urlset>
 `;
+  written.push(await write("maintenance.html", maintenancePage()));
   written.push(await write("sitemap.xml", sitemap));
 
   const robots = `User-agent: *

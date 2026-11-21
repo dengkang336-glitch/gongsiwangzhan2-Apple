@@ -36,6 +36,8 @@ env:
   DOMAIN: yunshufz.top
   SITE_ROOT: ${{ vars.SITE_ROOT || '/var/www/yunshufz.top' }}
   GUARD_DOMAINS: ${{ vars.GUARD_DOMAINS || 'ocrtext.top' }}
+  # live = 正常发布；paused = 整站 503 + 维护页（vhost 里已写成暂停，两边必须一致）
+  SITE_STATE: ${{ vars.SITE_STATE || 'live' }}
 
 jobs:
   deploy:
@@ -154,38 +156,74 @@ jobs:
           systemctl is-active nginx
           REMOTE
 
-      - name: 自检（新域名 200 + 内容 + 其它站点仍 200）
+      - name: 自检（按 SITE_STATE 断言，并回查同机其它站点）
         run: |
           set -euo pipefail
-          echo "--- $DOMAIN 首页 ---"
-          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 25 "https://$DOMAIN/" 2>/dev/null || true)
-          echo "https://$DOMAIN/ -> ${code:-000}"
-          [ "$code" = "200" ] || { echo "::error::首页不是 200"; exit 1; }
+          echo "SITE_STATE=$SITE_STATE"
 
-          echo "--- 关键页面 ---"
-          for page in / /products.html /products/vivace.html /products/palmglow.html \
-                      /products/shiyin.html /products/grove.html /en/ /en/products.html \
-                      /about.html /support.html /privacy.html /terms.html \
-                      /robots.txt /sitemap.xml; do
-            printf '%-30s -> ' "$page"
-            curl -fsS -o /dev/null -w '%{http_code}\n' --max-time 20 "https://$DOMAIN$page" || echo 'FAIL'
-          done
+          if [ "$SITE_STATE" = "paused" ]; then
+            echo "--- 暂停模式：所有页面必须 503，且 503 带维护页正文 ---"
+            for page in / /products.html /products/vivace.html /en/ /about.html \
+                        /privacy.html /assets/style.css; do
+              code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "https://$DOMAIN$page" 2>/dev/null || true)
+              printf '%-28s -> %s\n' "$page" "${code:-000}"
+              [ "${code:-000}" = "503" ] || { echo "::error::$page 应该是 503，实际 ${code:-000}"; exit 1; }
+            done
 
-          echo "--- 内容抽检（不只是 200，还要是这一版） ---"
-          home=$(curl -fsS --max-time 20 "https://$DOMAIN/")
-          check() {
-            if printf '%s' "$home" | grep -qF "$1"; then
-              echo "ok   $2"
-            else
-              echo "FAIL $2（页面里找不到：$1）"
-              exit 1
-            fi
-          }
-          check '广州云枢方舟科技有限公司' '公司全称与执照一致'
-          check '190 号亿能大厦 1207 室 A293' '注册地址'
-          check "https://$DOMAIN/" 'canonical 指向本站'
-          check 'support@' '联系方式'
-          check 'PalmGlow' '产品（掌光）'
+            echo "--- 维护页正文（503 也要给出人话，不能是空响应） ---"
+            page=$(curl -sS --max-time 20 "https://$DOMAIN/")
+            for needle in '站点正在维护' 'maintenance' '广州云枢方舟科技有限公司'; do
+              if printf '%s' "$page" | grep -qF "$needle"; then
+                echo "ok   $needle"
+              else
+                echo "::error::503 响应里找不到：$needle"
+                exit 1
+              fi
+            done
+
+            echo "--- 直接访问维护页应当拿不到（internal） ---"
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "https://$DOMAIN/maintenance.html" || true)
+            echo "/maintenance.html -> ${code:-000}（期望 404/503）"
+
+            echo "--- 证书仍然有效（暂停不能把 https 弄坏） ---"
+            echo | openssl s_client -servername "$DOMAIN" -connect "$DOMAIN:443" 2>/dev/null \
+              | openssl x509 -noout -issuer -dates 2>/dev/null || echo '读不到证书'
+          else
+            echo "--- $DOMAIN 首页 ---"
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 25 "https://$DOMAIN/" 2>/dev/null || true)
+            echo "https://$DOMAIN/ -> ${code:-000}"
+            [ "$code" = "200" ] || { echo "::error::首页不是 200"; exit 1; }
+
+            echo "--- 关键页面 ---"
+            for page in / /products.html /products/vivace.html /products/palmglow.html \
+                        /products/shiyin.html /products/grove.html /en/ /en/products.html \
+                        /about.html /support.html /privacy.html /terms.html \
+                        /robots.txt /sitemap.xml; do
+              printf '%-30s -> ' "$page"
+              curl -fsS -o /dev/null -w '%{http_code}\n' --max-time 20 "https://$DOMAIN$page" || echo 'FAIL'
+            done
+
+            echo "--- 内容抽检（不只是 200，还要是这一版） ---"
+            home=$(curl -fsS --max-time 20 "https://$DOMAIN/")
+            check() {
+              if printf '%s' "$home" | grep -qF "$1"; then
+                echo "ok   $2"
+              else
+                echo "FAIL $2（页面里找不到：$1）"
+                exit 1
+              fi
+            }
+            check '广州云枢方舟科技有限公司' '公司全称与执照一致'
+            check '190 号亿能大厦 1207 室 A293' '注册地址'
+            check "https://$DOMAIN/" 'canonical 指向本站'
+            check 'support@' '联系方式'
+            check 'PalmGlow' '产品（掌光）'
+
+            echo "--- 不存在的路径要回 404 ---"
+            code404=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "https://$DOMAIN/definitely-not-here-$(date +%s)")
+            echo "/definitely-not-here -> $code404"
+            [ "$code404" = "404" ] || echo "::warning::404 页返回了 $code404（软 404，不影响审核但不够干净）"
+          fi
 
           echo "--- HTTP 必须跳 HTTPS ---"
           redir=$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 20 "http://$DOMAIN/")
@@ -199,11 +237,6 @@ jobs:
           echo | openssl s_client -servername "$DOMAIN" -connect "$DOMAIN:443" 2>/dev/null \
             | openssl x509 -noout -issuer -dates 2>/dev/null || echo '读不到证书'
 
-          echo "--- 不存在的路径要回 404 ---"
-          code404=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "https://$DOMAIN/definitely-not-here-$(date +%s)")
-          echo "/definitely-not-here -> $code404"
-          [ "$code404" = "404" ] || echo "::warning::404 页返回了 $code404（软 404，不影响审核但不够干净）"
-
           echo "--- 回归检查：其它站点不能比改动前更差 ---"
           broken=0
           while read -r d before; do
@@ -214,4 +247,4 @@ jobs:
           done < /tmp/baseline.txt
           [ "$broken" = "0" ] || { echo '::error::同机其它站点状态变差，请立刻检查 nginx'; exit 1; }
 
-          echo '✅ 部署完成，同机其它站点正常'
+          echo "✅ 部署完成，同机其它站点正常"
