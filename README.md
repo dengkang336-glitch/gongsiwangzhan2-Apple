@@ -27,7 +27,7 @@
 │   ├── favicon.svg / og.png（1200×630）/ apple-touch-icon.png
 │   └── img/              产品截图 28 张，竖图 620×1344、宽图 1280×800
 ├── tools/
-│   ├── build.mjs         生成器：全部页面 + sitemap + robots + _headers + _redirects → dist/
+│   ├── build.mjs         生成器：全部页面 + sitemap + robots + _headers → dist/
 │   ├── check.mjs         产物自检：死链、h1 唯一、img alt、重复 id、canonical
 │   └── make-assets.py    用 Pillow 生成 og.png、apple-touch-icon.png、压缩截图
 ├── deploy/nginx/         旧国内机 vhost（仅留档）
@@ -40,7 +40,6 @@
 ├── maintenance.html      维护页（自包含样式，不引用 assets/）
 ├── assets/               assets/ 的整份副本
 ├── _headers              安全响应头 + 静态资源缓存
-├── _redirects            www → 裸域 301
 └── sitemap.xml / robots.txt
 ```
 
@@ -52,7 +51,7 @@ npm run preview   # 构建后起静态服务 → http://localhost:8820/
 npm run check     # 自检 dist/：死链、h1 唯一、img alt、重复 id、canonical
 ```
 
-构建是幂等的：每次先清空 `dist/`，再重写全部页面、`assets/` 副本、`sitemap.xml`、`robots.txt`、`_headers`、`_redirects`。
+构建是幂等的：每次先清空 `dist/`，再重写全部页面、`assets/` 副本、`sitemap.xml`、`robots.txt`、`_headers`。
 
 > **产物只在 `dist/` 里。** 仓库根目录只放源码；改完 `content/` 后必须重新构建，`dist/` 已 gitignore，不要提交。
 ## 四、改内容
@@ -113,7 +112,7 @@ Worker 静态资源只认 `wrangler.jsonc` 里 `assets.directory` 指的那个�
 `dist/` 是纯产物，包含：
 
 - `_headers` —— 安全响应头（`nosniff` / `Referrer-Policy` / `X-Frame-Options` / `Permissions-Policy`）+ 静态资源缓存（`/assets/img/*` 一年 immutable）
-- `_redirects` —— `www` → 裸域 301（按 `company.url` 自动生成）
+- `worker.mjs`（仓库根，不参与页面生成）—— `www` → 裸域 301，其余转 `env.ASSETS.fetch`
 - `404.html` —— 由 `wrangler.jsonc` 的 `not_found_handling: "404-page"` 用作未命中页面
 - 全部 HTML、`assets/` 副本、`sitemap.xml`、`robots.txt`、`maintenance.html`
 
@@ -123,12 +122,12 @@ Worker 静态资源只认 `wrangler.jsonc` 里 `assets.directory` 指的那个�
 2. Cloudflare 添加站点 `yunshufz.top`（Free 计划够用），把记录逐条重建，MX/TXT 原样照抄；A/CNAME 先保持 **DNS only（灰云）**。
 3. 站点验证通过后，去 dnspod 把 NS 改成 Cloudflare 给的那两个 —— **改 NS 之前别删旧记录**。
 4. `dig +short NS yunshufz.top @8.8.8.8` 返回 `*.ns.cloudflare.com` 即生效（几分钟到 24 小时）。
-5. Worker → Settings → Domains & Routes → 绑定 `yunshufz.top` 与 `www.yunshufz.top`；`www → 裸域` 的 301 由 `_redirects` 负责。
+5. Worker → Settings → Domains & Routes → 绑定 `yunshufz.top` 与 `www.yunshufz.top`；`www → 裸域` 的 301 由 `worker.mjs` 负责（CF 的 `_redirects` 只接受相对路径，做不了跨主机）。
 6. 清理旧机残留：`/var/www/yunshufz.top`、`/etc/nginx/conf.d/yunshufz.top.conf`，以及 dnspod 上指向 `129.204.52.104` 的 `www` A 记录（现在返回的是腾讯云未备案拦截页）。
 
 ### 换域名
 
-改 `content/site.mjs` 的 `company.domain` / `company.url` → `npm run build` → push；Cloudflare 侧给新域名加 Custom domain。`_redirects`、`canonical`、`sitemap.xml`、`og` 会跟着一起变，没有第二处要改。
+改 `content/site.mjs` 的 `company.domain` / `company.url` → `npm run build` → push；Cloudflare 侧给新域名加 Custom domain。`canonical`、`sitemap.xml`、`og` 会跟着一起变；另外要同步改 `worker.mjs` 顶部的 `APEX`（`www` 收口用）。
 
 ### 暂停 / 回滚
 
@@ -154,7 +153,7 @@ Worker 静态资源只认 `wrangler.jsonc` 里 `assets.directory` 指的那个�
 - [ ] **网站可公开访问**：无登录墙、无密码、HTTPS 有效、非「建设中」页面。
 - [ ] **首页能看出公司做什么**：首屏有主体名称、业务说明、产品横条，不是模板占位。
 - [ ] **每款 App 有独立介绍页**：`/products/<slug>` 含平台、功能、数据与隐私说明。审核在核对 App 时会点进来。
-- [ ] **真实联系方式**：邮箱 `yunshufz@163.com`（页脚 + `/support` + `/about`）与完整注册地址（页脚 + `/about` + 政策落款）。
+- [ ] **真实联系方式**：邮箱 `support@yunshufz.top`（页脚 + `/support` + `/about`）与完整注册地址（页脚 + `/about` + 政策落款）。
 - [ ] **隐私政策**：`/privacy`，逐款写明采集范围、留存期、第三方、跨境与删除方式；App Store Connect 的 Privacy Policy URL 填它。
 - [ ] **服务条款**：`/terms`。
 - [ ] **支持页**：`/support`，App Store 的 Support URL 填它。

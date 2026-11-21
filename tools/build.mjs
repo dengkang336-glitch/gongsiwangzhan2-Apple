@@ -2,7 +2,8 @@
 /**
  * 静态站点生成器。
  * 输入：content/site.mjs（公司、产品、文案）、content/legal.mjs（隐私政策 / 条款）
- * 输出：dist/ 目录（HTML、assets 副本、sitemap.xml、robots.txt、_headers、_redirects）
+ * 输出：dist/ 目录（HTML、assets 副本、sitemap.xml、robots.txt、_headers）
+ * 注：www → 裸域 301 不在构建里做（CF 的 _redirects 只接受相对路径），由仓库根目录 worker.mjs 负责。
  *       dist/ 是纯产物，部署时整目录上传即可（Cloudflare Pages 的「构建输出目录」填 dist）。
  *
  * 用法：node tools/build.mjs
@@ -986,10 +987,6 @@ const headersFile = `/*
   Cache-Control: public, max-age=31536000, immutable
 `;
 
-/* www 收口到裸域。域名若没走 Cloudflare，这条规则不生效，需要在 DNS 侧处理。 */
-const redirectsFile = `https://www.${new URL(company.url).hostname}/*  ${company.url}/:splat  301!
-`;
-
 async function main() {
   const written = [];
 
@@ -1040,7 +1037,6 @@ ${urls.join("\n")}
   written.push(await write("maintenance.html", maintenancePage()));
   written.push(await write("sitemap.xml", sitemap));
   written.push(await write("_headers", headersFile));
-  written.push(await write("_redirects", redirectsFile));
 
   const robots = `User-agent: *
 Allow: /

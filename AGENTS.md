@@ -9,7 +9,7 @@
    - `/about`「工商与联系信息」表
    - `/privacy` 与 `/terms` 落款
 
-   现值：广州云枢方舟科技有限公司 / Guangzhou Yunshu Ark Technology Co., Ltd. / 广州市花都区建设北路 190 号亿能大厦 1207 室 A293 / yunshufz@163.com（已在用的真实邮箱）/ 站点域名 yunshufz.top（Cloudflare Worker 静态资源托管，见下节）
+   现值：广州云枢方舟科技有限公司 / Guangzhou Yunshu Ark Technology Co., Ltd. / 广州市花都区建设北路 190 号亿能大厦 1207 室 A293 / support@yunshufz.top（已在用的真实邮箱）/ 站点域名 yunshufz.top（Cloudflare Worker 静态资源托管，见下节）
 2. **不出现竞品名称与商标**。站上这批产品属复刻类，功能可参考公开信息，视觉/文案/图标/代码必须原创。
 3. **不出现「独立开发者 / 个人工作室 / 个人接单」**这类与公司主体矛盾的表述。
 4. 隐私政策要**逐款**写明数据范围（是否上云、留存多久、第三方、跨境、删除方式），不能只写一段通稿——审核会拿它跟 App 的隐私清单对。
@@ -19,7 +19,8 @@
 ```text
 content/site.mjs    公司信息、9 款产品、界面词、全站文案
 content/legal.mjs   隐私政策与服务条款（中英各 12 节）
-tools/build.mjs     模板 + 生成（33 页 + sitemap + robots + _headers + _redirects → dist/）
+tools/build.mjs     模板 + 生成（33 页 + sitemap + robots + _headers → dist/）
+worker.mjs          CF Worker 入口：www → 裸域 301，其余转给静态资源
 tools/check.mjs     产物自检（死链 / h1 唯一 / img alt / 重复 id / canonical）
 tools/make-assets.py  og.png / apple-touch-icon.png（Pillow）
 assets/style.css    全部样式（断点 1080 / 860 / 640）
@@ -60,24 +61,31 @@ npm run preview   # 构建 + 本地起服务 → http://localhost:8820/
 
 | 项 | 状态 |
 | --- | --- |
-| 代码 | GitHub `main` 是唯一真源（**public**，贡献图靠它计数） |
-| 托管 | Cloudflare Workers Builds（Git 集成），Worker 名 `gongsiwangzhan2-apple`；`wrangler.jsonc` 里 `assets.directory = ./dist`；Build command 必须填 `node tools/build.mjs`，Deploy command 保持 `npx wrangler deploy` |
-| 域名 | **还没接上**：`yunshufz.top` 无 A 记录（NS 仍在 dnspod）；`www.yunshufz.top` 仍指 `129.204.52.104`，返回腾讯云未备案拦截页 |
-| 国内机 | `129.204.52.104` 上只剩 `/var/www/yunshufz.top` 静态文件与 `ocrtext.top.conf`，本站 vhost 与证书已清；nginx 配置干净（`sudo nginx -t` 通过） |
+| 线上 | `https://yunshufz.top` 已上线（Cloudflare Worker `gongsiwangzhan2-apple` 的静态资源），`www` 301 收口到裸域 |
+| 代码 | GitHub `main`（**public**，贡献图靠它计数）是唯一真源，但**发布不走 GitHub**（见下） |
+| 域名 | NS 已迁 Cloudflare（`norman/chelsea.ns.cloudflare.com`），apex 与 www 都走 CF 代理 |
+| 发布 | **本机 `npx wrangler deploy`**，OAuth 登录态在 `~/Library/Preferences/.wrangler/config/default.toml` |
+| 国内机 | `129.204.52.104` 上只剩 `/var/www/yunshufz.top` 与 `ocrtext.top.conf`，本站 vhost 与证书已清；`sudo nginx -t` 通过 |
 
-### 上线三步
+### 发布（唯一一条命令）
 
-1. **Workers Builds 设置**：Build command = `node tools/build.mjs`（留空必失败）；Deploy command = `npx wrangler deploy`（默认）；环境变量 `NODE_VERSION=20`。零依赖，不需要 `npm install`。`wrangler.jsonc` 的 `name` 必须与 Worker 名一致，否则 deploy 会新建一个 Worker、域名还绑在旧的上面。
-2. **DNS 迁到 Cloudflare**：先在 dnspod 导出全部记录（MX / TXT / SPF / DKIM / DMARC 一条都不能漏，域名邮箱靠它们），在 Cloudflare 重建后改 NS；A/CNAME 先灰云，验证通过再开代理。
-3. **Domains & Routes**：绑定 `yunshufz.top` 与 `www.yunshufz.top`。`www → 裸域 301` 由 `dist/_redirects` 负责，不用再配规则。
+```bash
+npm run build && node tools/check.mjs && npx wrangler deploy
+```
 
-### 日常迭代
+三段都要过：build 出 37 个文件、check 报「全部通过」、deploy 打印 `Uploaded gongsiwangzhan2-apple`。
 
-改 `content/` → `npm run build && npm run check` → `git push origin main` → Cloudflare 自动构建发布（约 1 分钟）。**这就是全部发布流程。**
+- **不要依赖 Cloudflare 的 Git 集成**。Workers Builds 一直报 `Error fetching GitHub User or Organization details`，构建被标成 `by API token` 且提交信息 `Empty commit message`，`dist/` 从未生成 → `Could not detect a directory containing static files`。**push 到 GitHub 不会自动上线**，push 只是备份与贡献图。
+- `npx wrangler login` 在本机直连会 `UND_ERR_CONNECT_TIMEOUT`；必须 `HTTPS_PROXY=http://127.0.0.1:7897 npx wrangler login`（走本地代理）。登录一次管很久，之后 `deploy` 不需要代理。
+- 换域名要同时改两处：`content/site.mjs` 的 `company.domain` / `company.url`，以及 `worker.mjs` 顶部的 `APEX`。生成器负责 `canonical` / `hreflang` / `sitemap.xml` / `og`，`worker.mjs` 负责 `www` 收口，没有第三处。
+- `_headers` 缓存策略：`/assets/img/*` 一年 immutable（换图必须换文件名），`/assets/*` 一周。CF 会把自己的默认策略拼在前面，浏览器取最后一条，行为正确。
+- `maintenance.html` 仍会生成但当前不生效（nginx 已退役）；要临时维护就下线部署或在 CF 面板操作。
 
-- 生成器是唯一事实来源：`canonical`、`hreflang`、`sitemap.xml`、`og`、`_redirects` 都从 `company.url` 推导，换域名只改那一处。
-- `_headers` 里的缓存策略：`/assets/img/*` 一年 immutable（换图必须换文件名，否则访客看到旧图），`/assets/*` 一周。
-- `maintenance.html`（自包含样式、不引用 assets）在 Cloudflare 下不再由 nginx 强制返回；要临时维护就用 CF 控制台的暂停发布或直接下线部署。
+### Cloudflare 踩过的坑
+
+- **`_redirects` 只接受相对路径**：写 `https://www.x.top/*  https://x.top/:splat  301!` 会被 API 直接拒（`Invalid _redirects configuration: Line 1: Only relative URLs are allowed. [code: 100324]`），deploy 全失败。跨主机收口只能放 `worker.mjs`。
+- **有 `main` 必须配 `assets.binding` + `run_worker_first: true`**。默认静态资源优先命中，worker 只有在未命中时才执行，不写 `run_worker_first` 则 `www` 的 301 永远不触发。
+- `wrangler.jsonc` 的 `name` 必须与线上 Worker 名一致，否则 deploy 会新建一个 Worker，域名还绑在旧的上面。
 
 ### 历史部署路线（已退役，仅留档）
 

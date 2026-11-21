@@ -32,6 +32,6 @@ jobs:
       - name: 确认 Cloudflare 需要的文件都在
         run: |
           set -euo pipefail
-          for f in dist/index.html dist/404.html dist/sitemap.xml dist/robots.txt dist/_headers dist/_redirects dist/assets/style.css; do
+          for f in dist/index.html dist/404.html dist/sitemap.xml dist/robots.txt dist/_headers dist/assets/style.css worker.mjs; do
             test -s "$f" && echo "ok $f" || { echo "缺失: $f"; exit 1; }
           done
