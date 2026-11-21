@@ -9,7 +9,7 @@
    - `/about`「工商与联系信息」表
    - `/privacy` 与 `/terms` 落款
 
-   现值：广州云枢方舟科技有限公司 / Guangzhou Yunshu Ark Technology Co., Ltd. / 广州市花都区建设北路 190 号亿能大厦 1207 室 A293 / yunshufz@163.com（已在用的真实邮箱）/ 站点域名 yunshufz.top（Cloudflare Pages 托管，DNS 迁移中，见下节）
+   现值：广州云枢方舟科技有限公司 / Guangzhou Yunshu Ark Technology Co., Ltd. / 广州市花都区建设北路 190 号亿能大厦 1207 室 A293 / yunshufz@163.com（已在用的真实邮箱）/ 站点域名 yunshufz.top（Cloudflare Worker 静态资源托管，见下节）
 2. **不出现竞品名称与商标**。站上这批产品属复刻类，功能可参考公开信息，视觉/文案/图标/代码必须原创。
 3. **不出现「独立开发者 / 个人工作室 / 个人接单」**这类与公司主体矛盾的表述。
 4. 隐私政策要**逐款**写明数据范围（是否上云、留存多久、第三方、跨境、删除方式），不能只写一段通稿——审核会拿它跟 App 的隐私清单对。
@@ -54,22 +54,22 @@ npm run preview   # 构建 + 本地起服务 → http://localhost:8820/
 - 首页产品横条在 ≤860 转成横向滚动（`flex` + `scroll-snap`），别改回 grid。
 - 截图/自测：`.reveal` 元素没进视口时 `opacity:0`，裁元素会拍到空白；全页截图先滚到底再回顶。
 
-## 部署（Cloudflare Pages）
+## 部署（Cloudflare Workers 静态资源）
 
 ### 当前状态（2026-11-21）
 
 | 项 | 状态 |
 | --- | --- |
 | 代码 | GitHub `main` 是唯一真源（**public**，贡献图靠它计数） |
-| 托管 | 用户在 Cloudflare 建了 Pages 项目并连了 GitHub 仓库；构建命令 `node tools/build.mjs`，输出目录 `dist` |
+| 托管 | Cloudflare Workers Builds（Git 集成），Worker 名 `gongsiwangzhan2-apple`；`wrangler.jsonc` 里 `assets.directory = ./dist`；Build command 必须填 `node tools/build.mjs`，Deploy command 保持 `npx wrangler deploy` |
 | 域名 | **还没接上**：`yunshufz.top` 无 A 记录（NS 仍在 dnspod）；`www.yunshufz.top` 仍指 `129.204.52.104`，返回腾讯云未备案拦截页 |
 | 国内机 | `129.204.52.104` 上只剩 `/var/www/yunshufz.top` 静态文件与 `ocrtext.top.conf`，本站 vhost 与证书已清；nginx 配置干净（`sudo nginx -t` 通过） |
 
 ### 上线三步
 
-1. **Cloudflare Pages 项目设置**：Framework preset = None；Build command = `node tools/build.mjs`；Build output directory = `dist`；Root = `/`；环境变量 `NODE_VERSION=20`。无第三方依赖，不需要 `npm install`。
+1. **Workers Builds 设置**：Build command = `node tools/build.mjs`（留空必失败）；Deploy command = `npx wrangler deploy`（默认）；环境变量 `NODE_VERSION=20`。零依赖，不需要 `npm install`。`wrangler.jsonc` 的 `name` 必须与 Worker 名一致，否则 deploy 会新建一个 Worker、域名还绑在旧的上面。
 2. **DNS 迁到 Cloudflare**：先在 dnspod 导出全部记录（MX / TXT / SPF / DKIM / DMARC 一条都不能漏，域名邮箱靠它们），在 Cloudflare 重建后改 NS；A/CNAME 先灰云，验证通过再开代理。
-3. **Custom domains**：加 `yunshufz.top` 与 `www.yunshufz.top`。`www → 裸域 301` 由 `dist/_redirects` 负责，不用再配规则。
+3. **Domains & Routes**：绑定 `yunshufz.top` 与 `www.yunshufz.top`。`www → 裸域 301` 由 `dist/_redirects` 负责，不用再配规则。
 
 ### 日常迭代
 

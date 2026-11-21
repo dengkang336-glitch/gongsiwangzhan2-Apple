@@ -1,0 +1,11 @@
+{
+  // Cloudflare Workers 静态资源项目：仓库里只有源码，静态文件由构建产出到 ./dist。
+  // name 必须与 CF 上的 Worker 完全一致，否则 wrangler deploy 会新建一个 Worker，域名还绑在旧的上面。
+  "name": "gongsiwangzhan2-apple",
+  "compatibility_date": "2026-11-21",
+  "assets": {
+    "directory": "./dist",
+    // 未命中的路径交给 dist/404.html，与 generator 的产出对齐
+    "not_found_handling": "404-page"
+  }
+}

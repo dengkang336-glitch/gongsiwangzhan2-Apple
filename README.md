@@ -34,7 +34,7 @@
 ├── package.json          npm run build / preview / check
 └── .github/workflows/    deploy-nginx-legacy.yml、deploy-overseas.yml（均手动触发）
 
-产物（dist/，已 gitignore，由 Cloudflare Pages 构建）
+产物（dist/，已 gitignore，由 Cloudflare Workers Builds 构建）
 ├── index.html / products.html / products/<slug>.html ×9 / about / support / privacy / terms / 404
 ├── en/                   英文镜像，路径同名
 ├── maintenance.html      维护页（自包含样式，不引用 assets/）
@@ -70,23 +70,43 @@ npm run check     # 自检 dist/：死链、h1 唯一、img alt、重复 id、ca
 
 产品截图放在 `assets/img/`，命名 `<slug>-01.jpg`……。换图后确认长宽比仍是竖图 620×1344 或宽图 1280×800，否则卡片会被裁切。
 
-## 五、部署（Cloudflare Pages）
+## 五、部署（Cloudflare Workers 静态资源）
 
-线上地址：**https://yunshufz.top**（Cloudflare Pages 托管，Cloudflare DNS）
+线上地址：**https://yunshufz.top**（Cloudflare Worker `gongsiwangzhan2-apple` + 静态资源，域名走 Cloudflare DNS）
 
-### Pages 项目设置
+仓库里的 `wrangler.jsonc` 就是部署契约：
+
+```jsonc
+{
+  "name": "gongsiwangzhan2-apple",   // 必须与 CF 上的 Worker 名完全一致
+  "compatibility_date": "2026-11-21",
+  "assets": { "directory": "./dist", "not_found_handling": "404-page" }
+}
+```
+
+### CF 项目里要填的两格
+
+这条流水线叫 **Workers Builds**（Git 集成），和 Pages 不是一回事：
 
 | 项 | 值 |
 | --- | --- |
-| Framework preset | None |
-| Build command | `node tools/build.mjs` |
-| Build output directory | `dist` |
-| Root directory | `/` |
-| 环境变量 | `NODE_VERSION=20`（无第三方依赖，不需要 `npm install`） |
+| Build command | `node tools/build.mjs`（**必填**，留空则静态文件不会生成） |
+| Deploy command | `npx wrangler deploy`（默认值，别改） |
+| 环境变量 | `NODE_VERSION=20`（项目零依赖，不需要 `npm install`） |
 
-**日常迭代就一句：push 到 `main`。** Cloudflare 自动拉代码 → 跑构建 → 发布，约 1 分钟。
+**日常迭代：改 → `npm run build && npm run check` → `git push origin main`**，CF 拉代码、跑构建、`wrangler deploy`，约 1 分钟。
 
-用 Direct Upload 的话：本地 `npm run build`，再 `npx wrangler pages deploy dist --project-name <项目名>`。
+手动发布（本机已登录时）：`npm run build && npx wrangler deploy`。
+
+### 为什么必须是这条路
+
+Worker 静态资源只认 `wrangler.jsonc` 里 `assets.directory` 指的那个目录。早期仓库把产物直接写在根目录，CF 拿仓库根去 `wrangler deploy` 会报：
+
+```text
+✘ [ERROR] Could not detect a directory containing static files (e.g. html, css and js) for the project
+```
+
+所以**产物统一在 `dist/`、且构建命令必须真的执行**，这两件事同时成立才能发布成功。
 
 ### 产物约定
 
@@ -94,7 +114,7 @@ npm run check     # 自检 dist/：死链、h1 唯一、img alt、重复 id、ca
 
 - `_headers` —— 安全响应头（`nosniff` / `Referrer-Policy` / `X-Frame-Options` / `Permissions-Policy`）+ 静态资源缓存（`/assets/img/*` 一年 immutable）
 - `_redirects` —— `www` → 裸域 301（按 `company.url` 自动生成）
-- `404.html` —— Cloudflare Pages 自动用作未命中页面
+- `404.html` —— 由 `wrangler.jsonc` 的 `not_found_handling: "404-page"` 用作未命中页面
 - 全部 HTML、`assets/` 副本、`sitemap.xml`、`robots.txt`、`maintenance.html`
 
 ### 域名接入（dnspod → Cloudflare）
@@ -103,7 +123,7 @@ npm run check     # 自检 dist/：死链、h1 唯一、img alt、重复 id、ca
 2. Cloudflare 添加站点 `yunshufz.top`（Free 计划够用），把记录逐条重建，MX/TXT 原样照抄；A/CNAME 先保持 **DNS only（灰云）**。
 3. 站点验证通过后，去 dnspod 把 NS 改成 Cloudflare 给的那两个 —— **改 NS 之前别删旧记录**。
 4. `dig +short NS yunshufz.top @8.8.8.8` 返回 `*.ns.cloudflare.com` 即生效（几分钟到 24 小时）。
-5. Pages → Custom domains → 添加 `yunshufz.top` 与 `www.yunshufz.top`；`www → 裸域` 的 301 由 `_redirects` 负责。
+5. Worker → Settings → Domains & Routes → 绑定 `yunshufz.top` 与 `www.yunshufz.top`；`www → 裸域` 的 301 由 `_redirects` 负责。
 6. 清理旧机残留：`/var/www/yunshufz.top`、`/etc/nginx/conf.d/yunshufz.top.conf`，以及 dnspod 上指向 `129.204.52.104` 的 `www` A 记录（现在返回的是腾讯云未备案拦截页）。
 
 ### 换域名
