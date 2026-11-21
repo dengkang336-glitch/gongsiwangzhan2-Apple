@@ -134,7 +134,7 @@ npm run check     # 自检 dist/：死链、h1 唯一、img alt、重复 id、ca
 - [ ] **网站可公开访问**：无登录墙、无密码、HTTPS 有效、非「建设中」页面。
 - [ ] **首页能看出公司做什么**：首屏有主体名称、业务说明、产品横条，不是模板占位。
 - [ ] **每款 App 有独立介绍页**：`/products/<slug>` 含平台、功能、数据与隐私说明。审核在核对 App 时会点进来。
-- [ ] **真实联系方式**：邮箱 `support@ysfangzhou.xyz`（页脚 + `/support` + `/about`）与完整注册地址（页脚 + `/about` + 政策落款）。
+- [ ] **真实联系方式**：邮箱 `yunshufz@163.com`（页脚 + `/support` + `/about`）与完整注册地址（页脚 + `/about` + 政策落款）。
 - [ ] **隐私政策**：`/privacy`，逐款写明采集范围、留存期、第三方、跨境与删除方式；App Store Connect 的 Privacy Policy URL 填它。
 - [ ] **服务条款**：`/terms`。
 - [ ] **支持页**：`/support`，App Store 的 Support URL 填它。

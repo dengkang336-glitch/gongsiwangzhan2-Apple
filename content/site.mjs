@@ -15,7 +15,7 @@ export const company = {
   // 只用于首页档案卡的副行，避免城市与完整地址重复出现「广州市广州市」。
   addressShortZh: "花都区建设北路 190 号亿能大厦 1207 室 A293",
   addressShortEn: "Room 1207-A293, Yineng Building, 190 Jianshe North Road, Huadu District",
-  email: "support@ysfangzhou.xyz",
+  email: "yunshufz@163.com",
   // 电话：有就填，留空则整行不渲染（Apple 报名表里还需要单独填电话）。
   phone: "",
   domain: "yunshufz.top",

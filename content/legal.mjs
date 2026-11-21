@@ -61,7 +61,7 @@ export const privacy = {
         h: "7. 保留与删除",
         p: [
           "访问日志不超过 30 天；支持邮件不超过 2 年；账号与用户内容保留至你删除账号或要求删除为止。",
-          "需要删除账号时，请用注册邮箱写信至 <a href=\"mailto:support@ysfangzhou.xyz\">support@ysfangzhou.xyz</a>，注明要删除的账号。我们会在 7 个工作日内完成删除并回复确认；法律要求保留的记录除外。",
+          "需要删除账号时，请用注册邮箱写信至 <a href=\"mailto:yunshufz@163.com\">yunshufz@163.com</a>，注明要删除的账号。我们会在 7 个工作日内完成删除并回复确认；法律要求保留的记录除外。",
         ],
       },
       {
@@ -92,7 +92,7 @@ export const privacy = {
       {
         h: "12. 联系我们",
         p: [
-          "广州云枢方舟科技有限公司<br>地址：广州市花都区建设北路 190 号亿能大厦 1207 室 A293<br>邮箱：<a href=\"mailto:support@ysfangzhou.xyz\">support@ysfangzhou.xyz</a>",
+          "广州云枢方舟科技有限公司<br>地址：广州市花都区建设北路 190 号亿能大厦 1207 室 A293<br>邮箱：<a href=\"mailto:yunshufz@163.com\">yunshufz@163.com</a>",
         ],
       },
     ],
@@ -156,7 +156,7 @@ export const privacy = {
         h: "7. Retention and deletion",
         p: [
           "Access logs are kept for no more than 30 days; support email for no more than two years; accounts and user content until you delete the account or ask us to remove it.",
-          "To delete an account, email <a href=\"mailto:support@ysfangzhou.xyz\">support@ysfangzhou.xyz</a> from the registered address and name the account. We will delete it and confirm within seven business days, except for records we are legally required to keep.",
+          "To delete an account, email <a href=\"mailto:yunshufz@163.com\">yunshufz@163.com</a> from the registered address and name the account. We will delete it and confirm within seven business days, except for records we are legally required to keep.",
         ],
       },
       {
@@ -187,7 +187,7 @@ export const privacy = {
       {
         h: "12. Contact",
         p: [
-          "Guangzhou Yunshu Ark Technology Co., Ltd.<br>Room 1207-A293, Yineng Building, 190 Jianshe North Road, Huadu District, Guangzhou, Guangdong, China<br>Email: <a href=\"mailto:support@ysfangzhou.xyz\">support@ysfangzhou.xyz</a>",
+          "Guangzhou Yunshu Ark Technology Co., Ltd.<br>Room 1207-A293, Yineng Building, 190 Jianshe North Road, Huadu District, Guangzhou, Guangdong, China<br>Email: <a href=\"mailto:yunshufz@163.com\">yunshufz@163.com</a>",
         ],
       },
     ],
@@ -276,7 +276,7 @@ export const terms = {
       {
         h: "12. 联系方式",
         p: [
-          "广州云枢方舟科技有限公司<br>地址：广州市花都区建设北路 190 号亿能大厦 1207 室 A293<br>邮箱：<a href=\"mailto:support@ysfangzhou.xyz\">support@ysfangzhou.xyz</a>",
+          "广州云枢方舟科技有限公司<br>地址：广州市花都区建设北路 190 号亿能大厦 1207 室 A293<br>邮箱：<a href=\"mailto:yunshufz@163.com\">yunshufz@163.com</a>",
         ],
       },
     ],
@@ -362,7 +362,7 @@ export const terms = {
       {
         h: "12. Contact",
         p: [
-          "Guangzhou Yunshu Ark Technology Co., Ltd.<br>Room 1207-A293, Yineng Building, 190 Jianshe North Road, Huadu District, Guangzhou, Guangdong, China<br>Email: <a href=\"mailto:support@ysfangzhou.xyz\">support@ysfangzhou.xyz</a>",
+          "Guangzhou Yunshu Ark Technology Co., Ltd.<br>Room 1207-A293, Yineng Building, 190 Jianshe North Road, Huadu District, Guangzhou, Guangdong, China<br>Email: <a href=\"mailto:yunshufz@163.com\">yunshufz@163.com</a>",
         ],
       },
     ],

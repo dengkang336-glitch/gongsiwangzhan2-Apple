@@ -9,7 +9,7 @@
    - `/about`「工商与联系信息」表
    - `/privacy` 与 `/terms` 落款
 
-   现值：广州云枢方舟科技有限公司 / Guangzhou Yunshu Ark Technology Co., Ltd. / 广州市花都区建设北路 190 号亿能大厦 1207 室 A293 / support@ysfangzhou.xyz（已在用的真实邮箱）/ 站点域名 yunshufz.top（Cloudflare Pages 托管，DNS 迁移中，见下节）
+   现值：广州云枢方舟科技有限公司 / Guangzhou Yunshu Ark Technology Co., Ltd. / 广州市花都区建设北路 190 号亿能大厦 1207 室 A293 / yunshufz@163.com（已在用的真实邮箱）/ 站点域名 yunshufz.top（Cloudflare Pages 托管，DNS 迁移中，见下节）
 2. **不出现竞品名称与商标**。站上这批产品属复刻类，功能可参考公开信息，视觉/文案/图标/代码必须原创。
 3. **不出现「独立开发者 / 个人工作室 / 个人接单」**这类与公司主体矛盾的表述。
 4. 隐私政策要**逐款**写明数据范围（是否上云、留存多久、第三方、跨境、删除方式），不能只写一段通稿——审核会拿它跟 App 的隐私清单对。
