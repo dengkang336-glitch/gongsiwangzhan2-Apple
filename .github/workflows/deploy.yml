@@ -136,6 +136,14 @@ jobs:
         run: |
           set -euo pipefail
           # nginx 配置也进仓库，改动可 review、可回滚；服务器上那份只是它的副本。
+          # 证书不在就绝不装 vhost：vhost 里 ssl_certificate 指向的 pem 缺失会让
+          # `nginx -t` 整份失败——nginx 起不来时同机 ocrtext.top 也会跟着挂。
+          if ! ssh deploy "sudo test -f /etc/letsencrypt/live/$DOMAIN/fullchain.pem"; then
+            echo "SKIP_NGINX=1" >> "$GITHUB_ENV"
+            echo "::warning::/etc/letsencrypt/live/$DOMAIN/fullchain.pem 不存在，跳过 vhost 安装与 reload。"
+            echo "            先签证书：sudo certbot certonly --webroot -w /var/www/certbot -d $DOMAIN"
+            exit 0
+          fi
           # 用 sudo tee：`sudo cat >` 的重定向由普通用户 shell 执行，会 Permission denied
           ssh deploy "sudo tee /etc/nginx/conf.d/yunshufz.top.conf > /dev/null" < deploy/nginx/yunshufz.top.conf
           ssh deploy "sudo chmod 644 /etc/nginx/conf.d/yunshufz.top.conf && wc -l /etc/nginx/conf.d/yunshufz.top.conf"
@@ -143,12 +151,23 @@ jobs:
       - name: 校验并 reload nginx（失败即止，不重启）
         run: |
           set -euo pipefail
+          if [ "${SKIP_NGINX:-0}" = "1" ]; then
+            echo '跳过：证书缺失，vhost 未安装'
+            exit 0
+          fi
           ssh deploy "bash -s" <<'REMOTE'
           set -euo pipefail
           echo '--- nginx -t ---'
-          # 配置不过就到此为止：nginx 继续跑旧配置，同机其它站点不受影响
+          # 配置不过就把刚装上的本站 conf 撤掉，回到改动前的可用状态：
+          # 否则这台机器下次 restart / 重启会起不来，ocrtext.top 会一起躺下。
           if ! sudo nginx -t; then
-            echo '::error::nginx 配置校验失败，未 reload（现网配置未变）'
+            echo '::error::nginx 配置校验失败 → 撤回 /etc/nginx/conf.d/yunshufz.top.conf'
+            sudo rm -f /etc/nginx/conf.d/yunshufz.top.conf
+            if sudo nginx -t; then
+              echo '已回到改动前的可用状态（本站未生效，其它站点无感）'
+            else
+              echo '::error::撤回后仍未通过，nginx 配置本身有问题，需人工介入'
+            fi
             exit 1
           fi
           echo '--- reload（graceful） ---'
@@ -157,10 +176,30 @@ jobs:
           systemctl is-active nginx
           REMOTE
 
-      - name: 自检（按 SITE_STATE 断言，并回查同机其它站点）
+      - name: 回归检查（同机其它站点不能比改动前更差）
+        run: |
+          set -euo pipefail
+          broken=0
+          while read -r d before; do
+            [ -n "$d" ] || continue
+            after=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "https://$d/" 2>/dev/null || true)
+            echo "$d  改动前=$before  现在=${after:-000}"
+            if [ "$before" = "200" ] && [ "$after" != "200" ]; then broken=1; fi
+          done < /tmp/baseline.txt
+          [ "$broken" = "0" ] || { echo '::error::同机其它站点状态变差，请立刻检查 nginx'; exit 1; }
+          echo 'ok   同机其它站点未受影响'
+
+      - name: 自检（按 SITE_STATE 断言外网表现）
         run: |
           set -euo pipefail
           echo "SITE_STATE=$SITE_STATE"
+
+          # 域名不解析（暂停中 / 未挂 DNS / 未备案被摘）时，外网断言无从谈起：
+          # 只打 warning，不让流水线变红——但部署本身已经完成。
+          if ! getent hosts "$DOMAIN" >/dev/null 2>&1; then
+            echo "::warning::$DOMAIN 当前不解析，跳过外网自检（文件与配置已同步到服务器）"
+            exit 0
+          fi
 
           if [ "$SITE_STATE" = "paused" ]; then
             echo "--- 暂停模式：所有页面必须 503，且 503 带维护页正文 ---"
@@ -238,14 +277,4 @@ jobs:
           echo | openssl s_client -servername "$DOMAIN" -connect "$DOMAIN:443" 2>/dev/null \
             | openssl x509 -noout -issuer -dates 2>/dev/null || echo '读不到证书'
 
-          echo "--- 回归检查：其它站点不能比改动前更差 ---"
-          broken=0
-          while read -r d before; do
-            [ -n "$d" ] || continue
-            after=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "https://$d/" 2>/dev/null || true)
-            echo "$d  改动前=$before  现在=${after:-000}"
-            if [ "$before" = "200" ] && [ "$after" != "200" ]; then broken=1; fi
-          done < /tmp/baseline.txt
-          [ "$broken" = "0" ] || { echo '::error::同机其它站点状态变差，请立刻检查 nginx'; exit 1; }
-
-          echo "✅ 部署完成，同机其它站点正常"
+          echo "✅ $DOMAIN 自检通过（SITE_STATE=$SITE_STATE）"
