@@ -76,6 +76,10 @@ python3 -m http.server 8800
 
 线上地址：**https://yunshufz.top**（Let's Encrypt 证书，certbot webroot 申请，`certbot.timer` 自动续期）
 
+> **当前状态（2026-11-21）：整站已暂停对外访问。** 用户在 DNS 侧移除了 `yunshufz.top` 的 A 记录，服务器上的 `/var/www/yunshufz.top`、`conf.d/yunshufz.top.conf` 与 Let's Encrypt 证书也已清理；`SITE_STATE=paused` 保留在仓库变量里，`deploy.yml` 的 vhost 也是暂停版（全站 503 + 维护页）。
+>
+> 重新上线：① DNS 加回 A 记录 → `129.204.52.104`；② `gh variable set SITE_STATE -b live`；③ 把 `deploy/nginx/yunshufz.top.conf` 里的 `return 503` 段换回 `location / { try_files ... }` 与静态资源段；④ 用 `certbot certonly --webroot` 重签证书；⑤ push（工作流会自己重建目录权限）。
+
 推 `main` 即发布：工作流在 GitHub 海外 runner 上登录服务器、同步文件、`nginx -t` 通过后 `systemctl reload nginx`，约 60 秒。也可在 Actions 页面 **Run workflow** 手动发一次。
 
 > 2026-11-20 起主站从海外机（43.162.93.153，Caddy）**迁到国内机**（129.204.52.104，宿主机 nginx），DNS 已指向国内机。海外那套仍留在仓库里当备用：`.github/workflows/deploy-overseas.yml`，只支持手动触发。
