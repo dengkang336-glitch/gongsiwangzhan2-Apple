@@ -2,7 +2,8 @@
 /**
  * 静态站点生成器。
  * 输入：content/site.mjs（公司、产品、文案）、content/legal.mjs（隐私政策 / 条款）
- * 输出：根目录下的 HTML、sitemap.xml、robots.txt
+ * 输出：dist/ 目录（HTML、assets 副本、sitemap.xml、robots.txt、_headers、_redirects）
+ *       dist/ 是纯产物，部署时整目录上传即可（Cloudflare Pages 的「构建输出目录」填 dist）。
  *
  * 用法：node tools/build.mjs
  */
@@ -15,6 +16,7 @@ import { privacy, terms } from "../content/legal.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
+const OUT = path.join(ROOT, "dist");
 
 const LANGS = ["zh", "en"];
 const LEGAL_DATE = { zh: "2026 年 11 月 20 日", en: "20 November 2026" };
@@ -964,14 +966,37 @@ function maintenancePage() {
 /* ---------------- output ---------------- */
 
 async function write(relPath, content) {
-  const abs = path.join(ROOT, relPath);
+  const abs = path.join(OUT, relPath);
   await fs.mkdir(path.dirname(abs), { recursive: true });
   await fs.writeFile(abs, content, "utf8");
   return relPath;
 }
 
+/* Cloudflare Pages 读取的响应头。规则按前缀匹配，后面的覆盖前面的。 */
+const headersFile = `/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: SAMEORIGIN
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+
+/assets/*
+  Cache-Control: public, max-age=604800
+
+/assets/img/*
+  Cache-Control: public, max-age=31536000, immutable
+`;
+
+/* www 收口到裸域。域名若没走 Cloudflare，这条规则不生效，需要在 DNS 侧处理。 */
+const redirectsFile = `https://www.${new URL(company.url).hostname}/*  ${company.url}/:splat  301!
+`;
+
 async function main() {
   const written = [];
+
+  // 每次构建前清空 dist/，避免删掉的产品页残留。assets/ 是源文件，整份拷进去。
+  await fs.rm(OUT, { recursive: true, force: true });
+  await fs.mkdir(OUT, { recursive: true });
+  await fs.cp(path.join(ROOT, "assets"), path.join(OUT, "assets"), { recursive: true });
 
   for (const lang of LANGS) {
     written.push(await write(P.home[lang], homePage(lang)));
@@ -1014,6 +1039,8 @@ ${urls.join("\n")}
 `;
   written.push(await write("maintenance.html", maintenancePage()));
   written.push(await write("sitemap.xml", sitemap));
+  written.push(await write("_headers", headersFile));
+  written.push(await write("_redirects", redirectsFile));
 
   const robots = `User-agent: *
 Allow: /
@@ -1022,7 +1049,7 @@ Sitemap: ${company.url}/sitemap.xml
 `;
   written.push(await write("robots.txt", robots));
 
-  console.log(`构建完成：${written.length} 个文件`);
+  console.log(`构建完成：${written.length} 个页面/文件 → dist/`);
   console.log(written.join("\n"));
 }
 

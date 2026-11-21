@@ -17,46 +17,44 @@
 ## 二、目录结构
 
 ```text
-.
-├── index.html            首页（公司档案卡 + 产品横条 + 产品索引 + 能力 + 关于 + 联系）
-├── products.html         产品目录（9 张卡片）
-├── products/<slug>.html  单款产品页 ×9（vivace / tuziscan / palmglow / shiyin / tunison /
-│                         nightisle / kite / grove / lampside）
-├── about.html            关于（自述、工作方式、工商与联系信息、我们不做的事）
-├── support.html          支持（FAQ + 各产品支持入口）
-├── privacy.html          隐私政策（12 节，逐款说明数据范围）
-├── terms.html            服务条款（12 节）
-├── 404.html
-├── en/                   英文镜像，路径同名
-├── sitemap.xml / robots.txt
-├── assets/
-│   ├── style.css         全部样式（含 1080 / 860 / 640 三档断点）
-│   ├── site.js           吸顶阴影、移动端菜单、进入视口渐显（无 JS 时有兜底）
-│   ├── favicon.svg
-│   ├── og.png            社交卡片 1200×630
-│   ├── apple-touch-icon.png
-│   └── img/              产品截图，手机竖图 620×1344、宽图 1280×800，共 28 张
+源码（仓库根目录只放源码）
 ├── content/
 │   ├── site.mjs          公司信息、9 款产品、界面文案、全站文案
 │   └── legal.mjs         隐私政策与服务条款（中英）
-└── tools/
-    ├── build.mjs         生成全部页面 + sitemap + robots
-    └── make-assets.py    用 Pillow 生成 og.png 与 apple-touch-icon.png
+├── assets/
+│   ├── style.css         全部样式（含 1080 / 860 / 640 三档断点）
+│   ├── site.js           吸顶阴影、移动端菜单、进入视口渐显（无 JS 时有兜底）
+│   ├── favicon.svg / og.png（1200×630）/ apple-touch-icon.png
+│   └── img/              产品截图 28 张，竖图 620×1344、宽图 1280×800
+├── tools/
+│   ├── build.mjs         生成器：全部页面 + sitemap + robots + _headers + _redirects → dist/
+│   ├── check.mjs         产物自检：死链、h1 唯一、img alt、重复 id、canonical
+│   └── make-assets.py    用 Pillow 生成 og.png、apple-touch-icon.png、压缩截图
+├── deploy/nginx/         旧国内机 vhost（仅留档）
+├── package.json          npm run build / preview / check
+└── .github/workflows/    deploy-nginx-legacy.yml、deploy-overseas.yml（均手动触发）
+
+产物（dist/，已 gitignore，由 Cloudflare Pages 构建）
+├── index.html / products.html / products/<slug>.html ×9 / about / support / privacy / terms / 404
+├── en/                   英文镜像，路径同名
+├── maintenance.html      维护页（自包含样式，不引用 assets/）
+├── assets/               assets/ 的整份副本
+├── _headers              安全响应头 + 静态资源缓存
+├── _redirects            www → 裸域 301
+└── sitemap.xml / robots.txt
 ```
 
 ## 三、本地预览与构建
 
 ```bash
-# 生成全部页面（改完 content/ 后必须跑）
-node tools/build.mjs
-
-# 本地预览
-python3 -m http.server 8800
-# 打开 http://localhost:8800/
+npm run build     # = node tools/build.mjs，产物全部进 dist/
+npm run preview   # 构建后起静态服务 → http://localhost:8820/
+npm run check     # 自检 dist/：死链、h1 唯一、img alt、重复 id、canonical
 ```
 
-构建是幂等的：每次都会重写根目录与 `en/` 下的全部 HTML、`sitemap.xml`、`robots.txt`。
+构建是幂等的：每次先清空 `dist/`，再重写全部页面、`assets/` 副本、`sitemap.xml`、`robots.txt`、`_headers`、`_redirects`。
 
+> **产物只在 `dist/` 里。** 仓库根目录只放源码；改完 `content/` 后必须重新构建，`dist/` 已 gitignore，不要提交。
 ## 四、改内容
 
 | 想改什么 | 改哪里 |
@@ -72,69 +70,61 @@ python3 -m http.server 8800
 
 产品截图放在 `assets/img/`，命名 `<slug>-01.jpg`……。换图后确认长宽比仍是竖图 620×1344 或宽图 1280×800，否则卡片会被裁切。
 
-## 五、部署（GitHub Actions → 国内服务器 nginx）
+## 五、部署（Cloudflare Pages）
 
-设计上的线上地址：**https://yunshufz.top**（Let's Encrypt 证书，certbot webroot 申请，`certbot.timer` 自动续期）
+线上地址：**https://yunshufz.top**（Cloudflare Pages 托管，Cloudflare DNS）
 
-> **当前状态（2026-11-21）：整站已暂停对外访问。** 用户在 DNS 侧移除了 `yunshufz.top` 的 A 记录，服务器上的 `/var/www/yunshufz.top`、`conf.d/yunshufz.top.conf` 与 Let's Encrypt 证书也已清理；`SITE_STATE=paused` 保留在仓库变量里，`deploy.yml` 的 vhost 也是暂停版（全站 503 + 维护页）。
->
-> 重新上线：① DNS 加回 A 记录 → `129.204.52.104`；② `gh variable set SITE_STATE -b live`；③ 把 `deploy/nginx/yunshufz.top.conf` 里的 `return 503` 段换回 `location / { try_files ... }` 与静态资源段；④ 用 `certbot certonly --webroot` 重签证书；⑤ push（工作流会自己重建目录权限）。
+### Pages 项目设置
 
-推 `main` 即发布：工作流在 GitHub 海外 runner 上登录服务器、同步文件、`nginx -t` 通过后 `systemctl reload nginx`，约 60 秒。也可在 Actions 页面 **Run workflow** 手动发一次。
-
-> 2026-11-20 起主站从海外机（43.162.93.153，Caddy）**迁到国内机**（129.204.52.104，宿主机 nginx），DNS 已指向国内机。海外那套仍留在仓库里当备用：`.github/workflows/deploy-overseas.yml`，只支持手动触发。
-
-### 服务器上的落点
-
-| 东西 | 位置 |
+| 项 | 值 |
 | --- | --- |
-| 服务器 | `129.204.52.104`（腾讯云，用户 `ubuntu`），同机还跑着 ocrtext.top |
-| 静态文件 | `/var/www/yunshufz.top`（2.8 MB） |
-| nginx vhost | `/etc/nginx/conf.d/yunshufz.top.conf`（**仓库里的副本在 `deploy/nginx/yunshufz.top.conf`，以仓库为准**，工作流每次覆盖） |
-| 证书 | `/etc/letsencrypt/live/yunshufz.top/`（到期 2027-02-18，自动续期） |
-| 日志 | `/var/log/nginx/yunshufz.top.access.log` / `.error.log` |
+| Framework preset | None |
+| Build command | `node tools/build.mjs` |
+| Build output directory | `dist` |
+| Root directory | `/` |
+| 环境变量 | `NODE_VERSION=20`（无第三方依赖，不需要 `npm install`） |
 
-`content/`、`tools/`、`*.md`、隐藏文件都**不会**同步上去。
+**日常迭代就一句：push 到 `main`。** Cloudflare 自动拉代码 → 跑构建 → 发布，约 1 分钟。
 
-### 仓库里的配置
+用 Direct Upload 的话：本地 `npm run build`，再 `npx wrangler pages deploy dist --project-name <项目名>`。
 
-| 名称 | 类型 | 值 |
-| --- | --- | --- |
-| `DEPLOY_HOST` | secret | `129.204.52.104` |
-| `DEPLOY_USER` | secret | `ubuntu` |
-| `DEPLOY_SSH_KEY` | secret | 本机 `~/.ssh/memorial_deploy` 全文（这台机器 ubuntu 认可的那把） |
-| `DEPLOY_PORT` | secret（可选） | 默认 `22` |
-| `SITE_ROOT` | variable | `/var/www/yunshufz.top` |
-| `GUARD_DOMAINS` | variable | `ocrtext.top` |
-| `SITE_STATE` | variable | `live`（正常）/ `paused`（全站 503 + 维护页）。与 `deploy/nginx/yunshufz.top.conf` 必须一致 |
+### 产物约定
 
-### 不影响同机其它站点
+`dist/` 是纯产物，包含：
 
-1. 只往 `/var/www/yunshufz.top/` 写，`rsync --delete` 作用域不外溢；
-2. nginx 只写自己的 `conf.d/yunshufz.top.conf`，不动 `ocrtext.top.conf`；
-3. reload 前先 `nginx -t`，不通过就**不 reload**（现网配置不变，其它站点无感）；
-4. 只 `systemctl reload`，**绝不 `restart`**；
-5. 发布后回查 `ocrtext.top`：改动前 200、改动后必须仍 200，否则判定事故并失败。
+- `_headers` —— 安全响应头（`nosniff` / `Referrer-Policy` / `X-Frame-Options` / `Permissions-Policy`）+ 静态资源缓存（`/assets/img/*` 一年 immutable）
+- `_redirects` —— `www` → 裸域 301（按 `company.url` 自动生成）
+- `404.html` —— Cloudflare Pages 自动用作未命中页面
+- 全部 HTML、`assets/` 副本、`sitemap.xml`、`robots.txt`、`maintenance.html`
 
-### 首次签发证书（换机器时照抄）
+### 域名接入（dnspod → Cloudflare）
 
-```bash
-sudo mkdir -p /var/www/certbot
-sudo certbot certonly --webroot -w /var/www/certbot -d yunshufz.top \
-  --deploy-hook "systemctl reload nginx"
-# 先只有 80 段的 vhost，证书签下来后再补 443 段（nginx 1.24 用 `listen 443 ssl http2`，
-# 不是 `http2 on`——后者要 1.25.1+）
-```
+1. **先在 dnspod 导出全部记录**，重点 MX / TXT / SPF / DKIM / DMARC —— 域名邮箱全靠它们，丢了收信就断。
+2. Cloudflare 添加站点 `yunshufz.top`（Free 计划够用），把记录逐条重建，MX/TXT 原样照抄；A/CNAME 先保持 **DNS only（灰云）**。
+3. 站点验证通过后，去 dnspod 把 NS 改成 Cloudflare 给的那两个 —— **改 NS 之前别删旧记录**。
+4. `dig +short NS yunshufz.top @8.8.8.8` 返回 `*.ns.cloudflare.com` 即生效（几分钟到 24 小时）。
+5. Pages → Custom domains → 添加 `yunshufz.top` 与 `www.yunshufz.top`；`www → 裸域` 的 301 由 `_redirects` 负责。
+6. 清理旧机残留：`/var/www/yunshufz.top`、`/etc/nginx/conf.d/yunshufz.top.conf`，以及 dnspod 上指向 `129.204.52.104` 的 `www` A 记录（现在返回的是腾讯云未备案拦截页）。
 
-### 换域名 / 回滚
+### 换域名
 
-- **换域名**：DNS A 记录指向本机 → 改 `content/site.mjs` 的 `company.domain` / `company.url` → `node tools/build.mjs` → 改 `deploy/nginx/yunshufz.top.conf` 里的 `server_name` 与证书路径 → 签证书 → push。
-- **回滚**：`git revert` 后 push；想整站下线就 `sudo rm /etc/nginx/conf.d/yunshufz.top.conf && sudo nginx -t && sudo systemctl reload nginx`。
-- **回到海外机**：Actions 里手动触发 `deploy-overseas`，再把 DNS 改回 `43.162.93.153`。
+改 `content/site.mjs` 的 `company.domain` / `company.url` → `npm run build` → push；Cloudflare 侧给新域名加 Custom domain。`_redirects`、`canonical`、`sitemap.xml`、`og` 会跟着一起变，没有第二处要改。
+
+### 暂停 / 回滚
+
+- 暂停：CF 控制台 Deployments → 停用当前部署；或把 DNS 摘掉（会直接不可达，不适合临时维护）。
+- 回滚：CF 控制台 Deployments → 选一个历史成功部署 → Rollback；仓库侧 `git revert` 后 push。
+
+### 历史部署路线（已退役，仅留档）
+
+- `.github/workflows/deploy-nginx-legacy.yml` —— 国内机 `129.204.52.104` + 宿主机 nginx，手动触发才有动作。
+- `.github/workflows/deploy-overseas.yml` —— 海外机 `43.162.93.153` + Caddy 容器，同样手动触发。
+
+两条都只做加法（独立目录 + 独立站点块 + reload 前 `nginx -t`），不要再对它们做自动触发。
 
 ### ⚠️ 备案
 
-这台是国内机，按要求域名需完成 **ICP 备案并接入该服务商**。目前 `ocrtext.top` 已备案，`yunshufz.top` **还没备案**——实测现在 80/443 都通，但未备案域名随时可能被服务商拦截（表现为突然打不开或弹出备案提示）。备案下来后要在服务商控制台做「备案接入」，域名继续指向本机即可。
+`.top` 域名未做 ICP 备案。Cloudflare 不经过国内机房，通常不会被腾讯云拦，但不等于合规；境内访问延迟也偏高。
 
 ## 六、Apple 组织账号审核自查清单
 

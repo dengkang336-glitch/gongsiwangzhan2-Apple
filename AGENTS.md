@@ -9,7 +9,7 @@
    - `/about`「工商与联系信息」表
    - `/privacy` 与 `/terms` 落款
 
-   现值：广州云枢方舟科技有限公司 / Guangzhou Yunshu Ark Technology Co., Ltd. / 广州市花都区建设北路 190 号亿能大厦 1207 室 A293 / support@ysfangzhou.xyz（已在用的真实邮箱）/ 备用域名 yunshufz.top（**已暂停，见下节**）
+   现值：广州云枢方舟科技有限公司 / Guangzhou Yunshu Ark Technology Co., Ltd. / 广州市花都区建设北路 190 号亿能大厦 1207 室 A293 / support@ysfangzhou.xyz（已在用的真实邮箱）/ 站点域名 yunshufz.top（Cloudflare Pages 托管，DNS 迁移中，见下节）
 2. **不出现竞品名称与商标**。站上这批产品属复刻类，功能可参考公开信息，视觉/文案/图标/代码必须原创。
 3. **不出现「独立开发者 / 个人工作室 / 个人接单」**这类与公司主体矛盾的表述。
 4. 隐私政策要**逐款**写明数据范围（是否上云、留存多久、第三方、跨境、删除方式），不能只写一段通稿——审核会拿它跟 App 的隐私清单对。
@@ -19,22 +19,24 @@
 ```text
 content/site.mjs    公司信息、9 款产品、界面词、全站文案
 content/legal.mjs   隐私政策与服务条款（中英各 12 节）
-tools/build.mjs     模板 + 生成（32 页 + sitemap.xml + robots.txt）
+tools/build.mjs     模板 + 生成（33 页 + sitemap + robots + _headers + _redirects → dist/）
+tools/check.mjs     产物自检（死链 / h1 唯一 / img alt / 重复 id / canonical）
 tools/make-assets.py  og.png / apple-touch-icon.png（Pillow）
 assets/style.css    全部样式（断点 1080 / 860 / 640）
 assets/site.js      吸顶阴影、移动菜单、reveal（无 JS 有兜底）
 assets/img/         产品截图：竖图 620×1344、宽图 1280×800
-→ 生成物：根目录 *.html（中文）+ en/ 镜像
+→ 产物：dist/（已 gitignore），中文在 dist/ 根，英文在 dist/en/
 ```
 
 ## 工作流
 
 ```bash
-node tools/build.mjs           # 改完 content/ 必须跑；幂等，覆盖全部 html
-python3 -m http.server 8800    # 本地预览
+npm run build     # node tools/build.mjs：先清空 dist/，再生成全部页面与 assets 副本
+npm run check     # 自检 dist/
+npm run preview   # 构建 + 本地起服务 → http://localhost:8820/
 ```
 
-**只改 `content/`，不要手改根目录 html**——下次构建就没了。想改版式去 `assets/style.css`，`tools/build.mjs` 只负责模板与路由。
+**产物只进 `dist/`；仓库根目录只放源码。** 只改 `content/`，不要手改 `dist/` 里的 html 或根目录——下次构建就没了。想改版式去 `assets/style.css`，`tools/build.mjs` 只负责模板与路由。
 
 可选字段（留空即整行不渲染，不会出现「未填」字样）：
 
@@ -52,42 +54,48 @@ python3 -m http.server 8800    # 本地预览
 - 首页产品横条在 ≤860 转成横向滚动（`flex` + `scroll-snap`），别改回 grid。
 - 截图/自测：`.reveal` 元素没进视口时 `opacity:0`，裁元素会拍到空白；全页截图先滚到底再回顶。
 
-## 部署（GitHub Actions → 国内服务器 nginx）
+## 部署（Cloudflare Pages）
 
-### 当前状态：**整站暂停（2026-11-21）**
+### 当前状态（2026-11-21）
 
 | 项 | 状态 |
 | --- | --- |
-| 代码 | GitHub `main` 即本地（唯一真源） |
-| 访客 | 打不开：`yunshufz.top` 的 A 记录已移除，DNS 不解析 |
-| 服务器 | `129.204.52.104` 上只剩 `/var/www/yunshufz.top` 静态文件（无 vhost 引用，无害）；vhost 与 Let's Encrypt 证书已清理 |
-| 仓库变量 | `SITE_STATE=paused`；`deploy/nginx/yunshufz.top.conf` 是暂停版（全站 503 + 维护页） |
-| 同机 ocrtext.top | 正常 200 |
+| 代码 | GitHub `main` 是唯一真源（**public**，贡献图靠它计数） |
+| 托管 | 用户在 Cloudflare 建了 Pages 项目并连了 GitHub 仓库；构建命令 `node tools/build.mjs`，输出目录 `dist` |
+| 域名 | **还没接上**：`yunshufz.top` 无 A 记录（NS 仍在 dnspod）；`www.yunshufz.top` 仍指 `129.204.52.104`，返回腾讯云未备案拦截页 |
+| 国内机 | `129.204.52.104` 上只剩 `/var/www/yunshufz.top` 静态文件与 `ocrtext.top.conf`，本站 vhost 与证书已清；nginx 配置干净（`sudo nginx -t` 通过） |
 
-**恢复上线**（顺序不能乱）：① DNS 加回 A `129.204.52.104` → ② `gh variable set SITE_STATE -b live` → ③ vhost 里 `return 503` 那 4 行换回 `location / { try_files $uri $uri/ $uri.html =404; }` + 静态资源段（注释里留了原文）→ ④ `sudo certbot certonly --webroot -w /var/www/certbot -d yunshufz.top` → ⑤ push（工作流会自动建目录、装 vhost、reload，海外 runner 顺便验证境外可达）。
+### 上线三步
 
-暂停页由 `tools/build.mjs` 的 `maintenancePage()` 生成 `maintenance.html`，**样式全内联、不引用 `assets/`**（暂停期间静态资源同样 503）；nginx 里 `location = /maintenance.html { internal; }`，直接访问拿不到。
+1. **Cloudflare Pages 项目设置**：Framework preset = None；Build command = `node tools/build.mjs`；Build output directory = `dist`；Root = `/`；环境变量 `NODE_VERSION=20`。无第三方依赖，不需要 `npm install`。
+2. **DNS 迁到 Cloudflare**：先在 dnspod 导出全部记录（MX / TXT / SPF / DKIM / DMARC 一条都不能漏，域名邮箱靠它们），在 Cloudflare 重建后改 NS；A/CNAME 先灰云，验证通过再开代理。
+3. **Custom domains**：加 `yunshufz.top` 与 `www.yunshufz.top`。`www → 裸域 301` 由 `dist/_redirects` 负责，不用再配规则。
 
-### 事实
+### 日常迭代
 
-- 生产机是**国内**腾讯云 `129.204.52.104`（用户 `ubuntu`），宿主机 nginx 直接发静态文件，落点 `/var/www/yunshufz.top`，vhost 在 `/etc/nginx/conf.d/yunshufz.top.conf`；**仓库里的 `deploy/nginx/yunshufz.top.conf` 是权威副本**，工作流每次覆盖服务器那份。
-- 这台机器上还跑着 `ocrtext.top`（小程序后端，反代 `127.0.0.1:8081` 的容器）。所以：独立目录、独立 conf.d 文件、`nginx -t` 过了才 `systemctl reload`、**绝不 `systemctl restart nginx`**、发布后回查 `ocrtext.top` 仍是 200。
-- `SITE_STATE`（仓库变量）决定工作流怎么断言：`live` 要求首页 200 + 抽检公司全称/地址/canonical；`paused` 要求所有路径 **503 且 503 带维护页正文**。vhost 与这个变量必须一致，否则流水线红。
-- 域名不解析时（暂停 / 未挂 DNS），外网自检自动降级为 `warning` 且不失败——但 `回归检查` 步骤照常跑，同机站点仍受保护。
-- nginx 是 **1.24**：443 要写 `listen 443 ssl http2;`，`http2 on;` 是 1.25.1+ 的写法，写了 `nginx -t` 直接 emerg。
-- 证书 certbot webroot（`/var/www/certbot`），续期自动；域名换机器后要重新签发。`/etc/letsencrypt/live/<域名>/` 被删时工作流**拒绝安装 vhost**（见下条）。
-- 海外机 `43.162.93.153`（Caddy + docker `jinianren-caddy`）保留为备用，workflow 是 `deploy-overseas.yml`，**只能手动触发**。
-- GitHub 仓库的 OAuth token **没有 `workflow` scope**，`gh` 走 https 推含 `.github/workflows/` 的提交会被拒；远端是 SSH（`git@github.com:dengkang336-glitch/gongsiwangzhan2-Apple.git`），别改回 https。
-- `yunshufz.top` **尚未 ICP 备案**（`ocrtext.top` 已备案）。大陆机跑未备案域名随时可能被拦——这也是当初整站暂停的直接原因；备案下来后要做「备案接入」。
+改 `content/` → `npm run build && npm run check` → `git push origin main` → Cloudflare 自动构建发布（约 1 分钟）。**这就是全部发布流程。**
 
-### 部署踩过的坑（血泪，别重复）
+- 生成器是唯一事实来源：`canonical`、`hreflang`、`sitemap.xml`、`og`、`_redirects` 都从 `company.url` 推导，换域名只改那一处。
+- `_headers` 里的缓存策略：`/assets/img/*` 一年 immutable（换图必须换文件名，否则访客看到旧图），`/assets/*` 一周。
+- `maintenance.html`（自包含样式、不引用 assets）在 Cloudflare 下不再由 nginx 强制返回；要临时维护就用 CF 控制台的暂停发布或直接下线部署。
 
-- **证书没了还装 vhost = 全机 nginx 起不来**。vhost 里 `ssl_certificate` 指向的 pem 缺失时 `nginx -t` 是**整份配置 emerg**；nginx 当时仍在跑是因为内存里是旧配置，**一旦 restart / 重启机器，同机 `ocrtext.top` 会一起躺下**。现在 vhost 步骤先 `sudo test -f /etc/letsencrypt/live/$DOMAIN/fullchain.pem`，不在就跳过安装并 warning。
-- **`nginx -t` 失败必须撤回自己的 conf**。只 `exit 1` 会把一台坏机器留在那儿；reload 步骤里已加：校验失败 → `sudo rm -f /etc/nginx/conf.d/yunshufz.top.conf` → 再 `nginx -t` 确认回到可用状态 → 才失败退出。
-- **`/var/www` 归 root**，被清过之后普通用户 `mkdir` 会 `Permission denied`：用 `sudo mkdir -p && sudo chown $(id -u):$(id -g)`。
-- `ssh deploy "sudo cat > /etc/nginx/conf.d/x.conf"` 会 `Permission denied`——重定向由普通用户 shell 执行，不在 sudo 语境；用 `sudo tee ... > /dev/null`。
-- 非 root 跑 `nginx -t` 会因读不了 privkey 报 test failed，**别误判成配置坏了**；诊断一律 `sudo nginx -t`。
-- 域名/证书/目录被人工清掉后，工作流仍会照常同步文件（无害），但会红在“证书缺失”。清理服务器后记得把 `SITE_STATE` 也改成 `paused`。
+### 历史部署路线（已退役，仅留档）
+
+- `.github/workflows/deploy-nginx-legacy.yml` —— 国内机 nginx，**仅 workflow_dispatch**。
+- `.github/workflows/deploy-overseas.yml` —— 海外机 `43.162.93.153`（Caddy 容器 `jinianren-caddy`），同样手动触发。
+
+两条都只做加法（独立目录 + 独立站点块 + reload 前 `nginx -t`），不要再给它们加自动触发。
+
+### nginx 时代踩过的坑（仍有效，回滚时会用到）
+
+- **证书没了还装 vhost = 全机 nginx 起不来**。`ssl_certificate` 指向的 pem 缺失时 `nginx -t` 是整份配置 emerg；nginx 仍在跑只是因为内存里是旧配置，**一旦 restart 或重启机器，同机 `ocrtext.top` 一起躺下**。
+- `nginx -t` 失败必须撤回自己的 conf 再退出，否则等于把一台坏机器留在那儿。
+- nginx **1.24**：443 写 `listen 443 ssl http2;`；`http2 on;` 是 1.25.1+ 才有的写法。
+- `/var/www` 归 root：`sudo mkdir -p && sudo chown $(id -u):$(id -g)`。
+- `ssh deploy "sudo cat > /etc/nginx/..."` 会 `Permission denied`（重定向在普通用户 shell 里执行），要用 `sudo tee`。
+- 非 root 跑 `nginx -t` 读不了 privkey 会假报失败，诊断一律 `sudo nginx -t`。
+- GitHub OAuth token **没有 `workflow` scope**：`gh` 走 https 推含 `.github/workflows/` 的提交会被拒；远端是 SSH（`git@github.com:dengkang336-glitch/gongsiwangzhan2-Apple.git`），别改回 https。
+- `yunshufz.top` **尚未 ICP 备案**（`ocrtext.top` 已备案）。走 Cloudflare 不过国内机房，通常不被拦，但不等于合规。
 
 ## 审核要点
 
