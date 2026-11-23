@@ -3,7 +3,7 @@ name: deploy
 # 推 main 自动把本站部署到 43.162.93.153（静态站，由服务器上已有的 Caddy 容器发出）。
 # 本机（大陆）到这台境外服务器的 22/80/443 被阻断，所以走 GitHub 海外 runner 中转。
 #
-# ⚠️ 这台服务器上还跑着别的站点（念园 memorialgrove3D、旧版公司站 ysfangzhou.xyz 等）。
+# ⚠️ 这台服务器上还跑着别的站点（念园 memorialgrove3D 等）。
 # 本工作流只做「加法」：
 #   - 自己的静态文件放进单独子目录，绝不动上一级已有的文件；
 #   - 自己的站点块写成单独文件，绝不改写别人的 .caddy；
@@ -19,7 +19,7 @@ name: deploy
 # 需要的仓库 Variable：
 #   DOMAIN           yunshufz.top
 #   SITE_SUBDIR      可选，默认 yunshufz（决定落在容器挂载目录下哪个子目录）
-#   GUARD_DOMAINS    可选，空格分隔的其它站点域名，reload 后逐个回查（默认 ysfangzhou.xyz mamorialgrove.top）
+#   GUARD_DOMAINS    可选，空格分隔的其它站点域名，reload 后逐个回查（默认 mamorialgrove.top）
 
 # ⚠️ 2026-11-20 起 yunshufz.top 的 DNS 已指向国内机（129.204.52.104），
 # 这份「海外机 + Caddy」的部署默认不再随 push 运行，只留作手动/备用。
@@ -43,7 +43,7 @@ jobs:
     env:
       DOMAIN: ${{ vars.DOMAIN || 'yunshufz.top' }}
       SITE_SUBDIR: ${{ vars.SITE_SUBDIR || 'yunshufz' }}
-      GUARD_DOMAINS: ${{ vars.GUARD_DOMAINS || 'ysfangzhou.xyz mamorialgrove.top' }}
+      GUARD_DOMAINS: ${{ vars.GUARD_DOMAINS || 'mamorialgrove.top' }}
       CADDY_DIR: /opt/jinianren3d/caddy-sites
       CADDY_CONTAINER: jinianren-caddy
 
